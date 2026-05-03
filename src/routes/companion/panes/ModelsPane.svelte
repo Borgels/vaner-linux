@@ -178,7 +178,7 @@
 <header class="hd">
   <div class="kicker-row">
     <V1Kicker text="Models" />
-    <DocsLink path="/docs/backends" />
+    <DocsLink path="/backends" />
   </div>
   <V1Headline text="Pick which model Vaner calls" size={22} />
 </header>

@@ -29,7 +29,7 @@
 <header class="hd">
   <div class="kicker-row">
     <V1Kicker text="Prepared" />
-    <DocsLink path="/docs/prepared-work" />
+    <DocsLink path="/prepared-work" />
   </div>
   <V1Headline text="What Vaner has ready for you" size={22} />
   <V1Body
