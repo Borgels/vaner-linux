@@ -403,11 +403,15 @@
                 />
               {/if}
               {#if onRemove && r.layers.mcp.wired}
-                <V1GhostButton
-                  title={busy[r.client_id] ? "Working…" : "Remove"}
+                <button
+                  type="button"
+                  class="remove-action"
+                  aria-label={`Remove Vaner from ${r.label}`}
                   disabled={busy[r.client_id] === true}
                   onclick={() => void handleRemove(r.client_id)}
-                />
+                >
+                  {busy[r.client_id] ? "Working…" : "Remove"}
+                </button>
               {/if}
             </div>
           {/if}
@@ -599,8 +603,33 @@
   }
   .row-actions {
     display: flex;
+    align-items: center;
     gap: 6px;
     margin-top: 4px;
+  }
+  .remove-action {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--vd-st-attention, #d27c7c) 72%, var(--vd-fg-3, #9a9aa2));
+    font-family: var(--vd-font);
+    font-size: 11px;
+    line-height: 1;
+    padding: 5px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .remove-action:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--vd-st-attention, #d27c7c) 10%, transparent);
+    color: var(--vd-st-attention, #d27c7c);
+  }
+  .remove-action:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .remove-action:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--vd-st-attention, #d27c7c) 50%, transparent);
+    outline-offset: 2px;
   }
   .verify-phrase {
     margin-top: 8px;

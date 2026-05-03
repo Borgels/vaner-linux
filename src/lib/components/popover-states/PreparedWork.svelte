@@ -9,6 +9,7 @@
   import PopoverContextBlock from "./PopoverContextBlock.svelte";
   import PopoverQuickActions from "./PopoverQuickActions.svelte";
   import { showToast } from "$lib/stores/toast.js";
+  import { canRunPreparedWorkAction, dispatchPreparedWorkAction } from "$lib/prepared-work-actions.js";
   import type { PreparedWorkAction, PreparedWorkCard } from "$lib/contract/types.js";
   import type { PopoverRuntimeContext } from "$lib/state/types.js";
 
@@ -41,10 +42,16 @@
   }
 
   async function run(card: PreparedWorkCard, action: PreparedWorkAction) {
-    if (!action.endpoint) return;
+    if (!canRunPreparedWorkAction(card, action)) return;
     try {
-      await invoke("prepared_work_action", { endpoint: action.endpoint, kind: action.kind, arguments: action.arguments ?? {} });
-      showToast(`${action.label} complete.`, "success", 3000);
+      const result = await dispatchPreparedWorkAction(invoke, card, action);
+      if (result.kind === "adopt") {
+        showToast(`Prediction adopted — ${result.message}.`, "success", 4000);
+      } else if (result.kind === "unsupported") {
+        showToast(result.message, "attention", 4000);
+      } else {
+        showToast(`${action.label} complete.`, "success", 3000);
+      }
     } catch (err) {
       const msg = typeof err === "string" ? err : `Couldn't ${action.label.toLowerCase()}.`;
       showToast(msg, "attention", 5000);
@@ -83,14 +90,14 @@
           </div>
         {/if}
         <div class="actions">
-          {#if card.primary_action?.endpoint}
+          {#if card.primary_action && canRunPreparedWorkAction(card, card.primary_action)}
             {#if i === 0}
               <V1PrimaryButton title={card.primary_action.label} tint="var(--vd-st-active)" onclick={() => run(card, card.primary_action!)} />
             {:else}
               <V1GhostButton title={card.primary_action.label} onclick={() => run(card, card.primary_action!)} />
             {/if}
           {/if}
-          {#each card.secondary_actions.filter((a) => a.endpoint).slice(0, 3) as action (`${card.id}-${action.kind}-${action.label}`)}
+          {#each card.secondary_actions.filter((a) => canRunPreparedWorkAction(card, a)).slice(0, 3) as action (`${card.id}-${action.kind}-${action.label}`)}
             <V1GhostButton title={action.label} onclick={() => run(card, action)} />
           {/each}
         </div>

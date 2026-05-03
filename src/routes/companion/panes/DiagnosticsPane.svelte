@@ -47,7 +47,7 @@
 <header class="hd">
   <div class="kicker-row">
     <V1Kicker text="Diagnostics" />
-    <DocsLink path="/docs/troubleshooting" />
+    <DocsLink path="/troubleshooting" />
   </div>
   <V1Headline text="Help me help you" size={22} />
   <V1Body

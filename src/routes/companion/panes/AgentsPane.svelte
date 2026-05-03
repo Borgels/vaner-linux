@@ -20,7 +20,7 @@
 <header class="hd">
   <div class="kicker-row">
     <V1Kicker text="Agents" />
-    <DocsLink path="/docs/integrations/connect-your-client" />
+    <DocsLink path="/integrations/connect-your-client" />
   </div>
   <V1Headline text="Who can Vaner talk to" size={22} />
 </header>

@@ -24,6 +24,14 @@
     startOllamaHealthListener,
     stopOllamaHealthListener,
   } from "$lib/stores/ollama-health.js";
+  import {
+    startPreparedWorkPolling,
+    stopPreparedWorkPolling,
+  } from "$lib/stores/prepared-work.js";
+  import {
+    startPredictionStream,
+    stopPredictionStream,
+  } from "$lib/stores/predictions.js";
 
   let { children } = $props();
 
@@ -65,6 +73,8 @@
     // command, just one poller per window.
     startEngineStatusPolling();
     void startOllamaHealthListener();
+    void startPredictionStream();
+    startPreparedWorkPolling(8);
     // The Rust side fires `companion:navigate` when the user reopens
     // the window from the tray with a different requested pane. Sync
     // our query string when that happens.
@@ -77,6 +87,8 @@
     unlisten?.();
     stopEngineStatusPolling();
     stopOllamaHealthListener();
+    stopPreparedWorkPolling();
+    void stopPredictionStream();
   });
 
   const showTimeline = $derived(tabs.find((t) => t.id === active)?.showsTimeline ?? false);
