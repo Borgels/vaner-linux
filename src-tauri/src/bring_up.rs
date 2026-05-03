@@ -28,6 +28,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tokio::process::Command;
 
@@ -35,7 +36,7 @@ const COCKPIT_HOST: &str = "127.0.0.1";
 const COCKPIT_PORT: u16 = 8473;
 /// Probe timeout per attempt. Short — the cockpit is loopback so a real
 /// answer arrives in single-digit ms; anything longer means it's down.
-const PROBE_TIMEOUT: Duration = Duration::from_millis(250);
+const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 /// Total budget for `ensure_engine_running` to wait after `vaner up`.
 /// 10 seconds covers cold model-runtime warmup (Ollama enumeration,
 /// scenario DB open) without leaving the popover hanging forever on a
@@ -64,24 +65,162 @@ pub enum BringUpOutcome {
 #[derive(Debug, Clone, Serialize)]
 pub struct BringUpResult {
     pub outcome: BringUpOutcome,
+    pub code: String,
     /// Resolved workspace path the bringup targeted, if any.
     pub workspace: Option<String>,
+    pub observed_repo_root: Option<String>,
+    pub cli_path: Option<String>,
     /// Human-readable explanation. Empty for `AlreadyRunning`.
     pub detail: String,
 }
 
-/// HTTP probe of the cockpit. Returns true on any 2xx/3xx — the cockpit
-/// answers 200 on `/` even before `--with-engine` is fully online, and
-/// that's enough for the popover to stop showing the error panel. The
-/// daemon-status JSON poll downstream picks up engine readiness on its
-/// own cadence.
-async fn probe() -> bool {
-    let url = format!("http://{COCKPIT_HOST}:{COCKPIT_PORT}/");
+struct ProbeResult {
+    ready: bool,
+    code: &'static str,
+    detail: String,
+    observed_repo_root: Option<String>,
+}
+
+/// HTTP readiness probe of the daemon. `/` can succeed while the
+/// prediction engine is missing or serving a different repo, so readiness
+/// is based on `/health`, `/status`, and a parseable `/predictions/active`.
+async fn probe(expected_workspace: Option<&Path>) -> ProbeResult {
+    let base = format!("http://{COCKPIT_HOST}:{COCKPIT_PORT}");
     let client = match reqwest::Client::builder().timeout(PROBE_TIMEOUT).build() {
         Ok(c) => c,
-        Err(_) => return false,
+        Err(e) => {
+            return ProbeResult {
+                ready: false,
+                code: "probe_client_failed",
+                detail: e.to_string(),
+                observed_repo_root: None,
+            };
+        }
     };
-    matches!(client.get(&url).send().await, Ok(resp) if resp.status().is_success())
+    match client.get(format!("{base}/health")).send().await {
+        Ok(resp) if resp.status().is_success() => {}
+        Ok(resp) => {
+            return ProbeResult {
+                ready: false,
+                code: "health_failed",
+                detail: format!("health returned {}", resp.status()),
+                observed_repo_root: None,
+            };
+        }
+        Err(e) => {
+            return ProbeResult {
+                ready: false,
+                code: "daemon_unreachable",
+                detail: e.to_string(),
+                observed_repo_root: None,
+            };
+        }
+    }
+
+    let status: Value = match client.get(format!("{base}/status")).send().await {
+        Ok(resp) if resp.status().is_success() => match resp.json().await {
+            Ok(value) => value,
+            Err(e) => {
+                return ProbeResult {
+                    ready: false,
+                    code: "status_decode_failed",
+                    detail: e.to_string(),
+                    observed_repo_root: None,
+                };
+            }
+        },
+        Ok(resp) => {
+            return ProbeResult {
+                ready: false,
+                code: "status_failed",
+                detail: format!("status returned {}", resp.status()),
+                observed_repo_root: None,
+            };
+        }
+        Err(e) => {
+            return ProbeResult {
+                ready: false,
+                code: "status_timeout",
+                detail: e.to_string(),
+                observed_repo_root: None,
+            };
+        }
+    };
+
+    let observed_repo_root = status
+        .get("repo_root")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    if let (Some(expected), Some(observed)) = (expected_workspace, observed_repo_root.as_deref()) {
+        if !same_path(expected, Path::new(observed)) {
+            return ProbeResult {
+                ready: false,
+                code: "wrong_workspace",
+                detail: format!("daemon is serving {observed}"),
+                observed_repo_root,
+            };
+        }
+    }
+    let engine_available = status
+        .get("prediction_health")
+        .and_then(|value| value.get("engine_available"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !engine_available {
+        return ProbeResult {
+            ready: false,
+            code: "engine_unavailable",
+            detail: "daemon is up without a live prediction engine".to_string(),
+            observed_repo_root,
+        };
+    }
+
+    match client
+        .get(format!("{base}/predictions/active"))
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => match resp.json::<Value>().await {
+            Ok(_) => ProbeResult {
+                ready: true,
+                code: "ready",
+                detail: String::new(),
+                observed_repo_root,
+            },
+            Err(e) => ProbeResult {
+                ready: false,
+                code: "predictions_decode_failed",
+                detail: e.to_string(),
+                observed_repo_root,
+            },
+        },
+        Ok(resp) => ProbeResult {
+            ready: false,
+            code: "predictions_failed",
+            detail: format!("predictions returned {}", resp.status()),
+            observed_repo_root,
+        },
+        Err(e) => ProbeResult {
+            ready: false,
+            code: "predictions_timeout",
+            detail: e.to_string(),
+            observed_repo_root,
+        },
+    }
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    let left = left
+        .canonicalize()
+        .unwrap_or_else(|_| left.to_path_buf())
+        .to_string_lossy()
+        .into_owned();
+    let right = right
+        .canonicalize()
+        .unwrap_or_else(|_| right.to_path_buf())
+        .to_string_lossy()
+        .into_owned();
+    left == right
 }
 
 /// Idempotent. If the cockpit is already up: returns immediately. If
@@ -89,10 +228,17 @@ async fn probe() -> bool {
 /// Otherwise shells `vaner up --detach --path <workspace>` and waits
 /// up to `STARTUP_BUDGET` for `/` to answer.
 pub async fn ensure_engine_running() -> BringUpResult {
-    if probe().await {
+    let workspace = crate::workspace::resolve();
+    let initial_probe = probe(workspace.as_deref()).await;
+    if initial_probe.ready {
         return BringUpResult {
             outcome: BringUpOutcome::AlreadyRunning,
-            workspace: crate::workspace::resolve().map(|p| p.to_string_lossy().into_owned()),
+            code: "already_running".to_string(),
+            workspace: workspace.map(|p| p.to_string_lossy().into_owned()),
+            observed_repo_root: initial_probe.observed_repo_root,
+            cli_path: crate::vaner_cli::resolve_vaner_bin()
+                .ok()
+                .map(|p| p.to_string_lossy().into_owned()),
             detail: String::new(),
         };
     }
@@ -103,10 +249,15 @@ pub async fn ensure_engine_running() -> BringUpResult {
     // surfacing a "Restart engine" CTA in that state — the right
     // CTA is "finish setup", not "try to start a daemon against a
     // non-repo and watch it bounce."
-    let Some(workspace) = crate::workspace::resolve() else {
+    let Some(workspace) = workspace else {
         return BringUpResult {
             outcome: BringUpOutcome::NoWorkspace,
+            code: "no_workspace".to_string(),
             workspace: None,
+            observed_repo_root: initial_probe.observed_repo_root,
+            cli_path: crate::vaner_cli::resolve_vaner_bin()
+                .ok()
+                .map(|p| p.to_string_lossy().into_owned()),
             detail: "no workspace selected".to_string(),
         };
     };
@@ -117,11 +268,33 @@ pub async fn ensure_engine_running() -> BringUpResult {
         Err(e) => {
             return BringUpResult {
                 outcome: BringUpOutcome::Failed,
+                code: "cli_missing".to_string(),
                 workspace: Some(workspace_str),
+                observed_repo_root: initial_probe.observed_repo_root,
+                cli_path: None,
                 detail: e,
             };
         }
     };
+    let cli_path = Some(bin.to_string_lossy().into_owned());
+
+    if initial_probe.code == "wrong_workspace" {
+        return BringUpResult {
+            outcome: BringUpOutcome::Failed,
+            code: "wrong_workspace".to_string(),
+            workspace: Some(workspace_str),
+            observed_repo_root: initial_probe.observed_repo_root,
+            cli_path,
+            detail: initial_probe.detail,
+        };
+    }
+
+    // If the canonical loopback endpoint is silent, clear the workspace's
+    // supervised runtime before starting it again. This handles stale
+    // same-repo processes that still own 8473 but no longer answer HTTP; a
+    // plain `vaner up` would otherwise auto-shift to a fallback port the
+    // desktop does not use.
+    let _ = down_run(&bin, &workspace_str).await;
 
     // Fire `vaner up --detach --json` first. New CLIs (≥ 0.8.9) emit
     // a single line of structured stdout we can use for specific
@@ -149,11 +322,16 @@ pub async fn ensure_engine_running() -> BringUpResult {
     // modes (e.g. cockpit already bound by another instance) still
     // result in a healthy endpoint.
     let deadline = Instant::now() + STARTUP_BUDGET;
+    let mut last_probe = initial_probe;
     while Instant::now() < deadline {
-        if probe().await {
+        last_probe = probe(Some(&workspace)).await;
+        if last_probe.ready {
             return BringUpResult {
                 outcome: BringUpOutcome::Started,
+                code: "started".to_string(),
                 workspace: Some(workspace_str),
+                observed_repo_root: last_probe.observed_repo_root,
+                cli_path,
                 detail: String::new(),
             };
         }
@@ -162,9 +340,15 @@ pub async fn ensure_engine_running() -> BringUpResult {
 
     BringUpResult {
         outcome: BringUpOutcome::Failed,
+        code: last_probe.code.to_string(),
         workspace: Some(workspace_str),
+        observed_repo_root: last_probe.observed_repo_root,
+        cli_path,
         detail: if detail_from_cli.is_empty() {
-            "cockpit did not come up within 10 seconds".to_string()
+            format!(
+                "cockpit did not become ready within 10 seconds: {}",
+                last_probe.detail
+            )
         } else {
             detail_from_cli
         },
@@ -275,6 +459,20 @@ async fn up_run_legacy(bin: &Path, workspace: &str) -> String {
         Ok(o) if o.status.success() => String::new(),
         Ok(o) => String::from_utf8_lossy(&o.stderr).trim().to_string(),
         Err(e) => format!("could not spawn `vaner up`: {e}"),
+    }
+}
+
+async fn down_run(bin: &Path, workspace: &str) -> String {
+    let output = Command::new(bin)
+        .arg("down")
+        .arg("--path")
+        .arg(workspace)
+        .output()
+        .await;
+    match output {
+        Ok(o) if o.status.success() => String::new(),
+        Ok(o) => String::from_utf8_lossy(&o.stderr).trim().to_string(),
+        Err(e) => format!("could not spawn `vaner down`: {e}"),
     }
 }
 

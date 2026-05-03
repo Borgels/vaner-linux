@@ -16,12 +16,21 @@ const state = writable<PreparedWorkState>({
 
 let started = false;
 let timer: ReturnType<typeof setInterval> | null = null;
+let inFlight: Promise<void> | null = null;
 
 function message(err: unknown): string {
   return typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
 }
 
-export async function refreshPreparedWork(limit = 3): Promise<void> {
+export async function refreshPreparedWork(limit = 8): Promise<void> {
+  if (inFlight) return inFlight;
+  inFlight = doRefreshPreparedWork(limit).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function doRefreshPreparedWork(limit = 8): Promise<void> {
   state.update((current) => ({ ...current, loading: current.cards.length === 0 }));
   try {
     const cards = await invoke<PreparedWorkCard[]>("prepared_work", { limit });
@@ -32,7 +41,7 @@ export async function refreshPreparedWork(limit = 3): Promise<void> {
   }
 }
 
-export function startPreparedWorkPolling(limit = 3, intervalMs = 5000): void {
+export function startPreparedWorkPolling(limit = 8, intervalMs = 5000): void {
   if (started) return;
   started = true;
   void refreshPreparedWork(limit);

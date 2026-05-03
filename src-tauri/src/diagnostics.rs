@@ -25,27 +25,60 @@ async fn run_vaner(args: &[&str], allow_nonzero: bool) -> Result<String, String>
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+fn selected_workspace() -> Result<String, String> {
+    crate::workspace::resolve()
+        .map(|path| path.to_string_lossy().into_owned())
+        .ok_or_else(|| "No Vaner workspace selected.".to_string())
+}
+
 #[tauri::command]
 pub async fn diagnostics_status() -> Result<Value, String> {
-    let path = crate::workspace::resolve_str();
+    let path = selected_workspace()?;
     let stdout = run_vaner(&["status", "--json", "--path", &path], true).await?;
     serde_json::from_str::<Value>(&stdout).map_err(|e| format!("could not parse status JSON: {e}"))
 }
 
 #[tauri::command]
+pub async fn diagnostics_runtime() -> Result<Value, String> {
+    let cli_path = crate::vaner_cli::resolve_vaner_bin().ok();
+    let cli_version = match run_vaner(&["--version"], true).await {
+        Ok(text) => text.trim().to_string(),
+        Err(err) => err,
+    };
+    Ok(serde_json::json!({
+        "desktop_version": env!("CARGO_PKG_VERSION"),
+        "current_exe": std::env::current_exe().ok().map(|p| p.to_string_lossy().into_owned()),
+        "appimage": std::env::var("APPIMAGE").ok(),
+        "local_build": crate::updater::updater_disabled(),
+        "updater_disabled": crate::updater::updater_disabled(),
+        "vaner_bin": cli_path.map(|p| p.to_string_lossy().into_owned()),
+        "vaner_path_env": std::env::var("VANER_PATH").ok(),
+        "workspace": crate::workspace::resolve().map(|p| p.to_string_lossy().into_owned()),
+        "cli_version": cli_version,
+        "cockpit_url": "http://127.0.0.1:8473",
+    }))
+}
+
+#[tauri::command]
 pub async fn diagnostics_doctor() -> Result<Value, String> {
-    let path = crate::workspace::resolve_str();
+    let path = selected_workspace()?;
     let stdout = run_vaner(&["doctor", "--json", "--path", &path], true).await?;
     serde_json::from_str::<Value>(&stdout).map_err(|e| format!("could not parse doctor JSON: {e}"))
 }
 
 #[tauri::command]
 pub async fn diagnostics_restart_engine() -> Result<String, String> {
-    let path = crate::workspace::resolve_str();
+    let Some(path) = crate::workspace::resolve() else {
+        return Err(
+            "No Vaner workspace selected. Pick a workspace before restarting the engine."
+                .to_string(),
+        );
+    };
+    let path = path.to_string_lossy().into_owned();
     let _ = run_vaner(&["down", "--path", &path], true).await;
-    run_vaner(&["up", "--detach", "--path", &path], true)
-        .await
-        .map(|_| "Vaner restart requested.".to_string())
+    let result = crate::bring_up::ensure_engine_running().await;
+    serde_json::to_string_pretty(&result)
+        .map_err(|e| format!("could not encode restart result: {e}"))
 }
 
 #[tauri::command]
@@ -66,7 +99,7 @@ pub async fn set_local_model(model_id: String) -> Result<String, String> {
     if model_id.trim().is_empty() {
         return Err("model_id is required".to_string());
     }
-    let path = crate::workspace::resolve_str();
+    let path = selected_workspace()?;
     run_vaner(
         &["config", "set", "--path", &path, "backend.model", &model_id],
         true,

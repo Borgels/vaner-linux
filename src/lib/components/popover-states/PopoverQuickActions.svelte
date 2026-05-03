@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { isPaused } from "$lib/stores/app-state.js";
+  import { setVanerPaused } from "$lib/stores/app-state.js";
   import V1PrimaryButton from "$lib/components/primitives/V1PrimaryButton.svelte";
   import V1GhostButton from "$lib/components/primitives/V1GhostButton.svelte";
 
@@ -29,7 +29,7 @@
   }
 
   function pause() {
-    isPaused.set(true);
+    void setVanerPaused(true);
   }
 </script>
 

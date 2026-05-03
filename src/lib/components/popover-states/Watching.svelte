@@ -10,6 +10,7 @@
   import PopoverFooter from "$lib/components/PopoverFooter.svelte";
   import PopoverContextBlock from "./PopoverContextBlock.svelte";
   import PopoverQuickActions from "./PopoverQuickActions.svelte";
+  import PredictionWorkSwitcher from "./PredictionWorkSwitcher.svelte";
   import type { PopoverRuntimeContext, WatchingSummary } from "$lib/state/types.js";
 
   type Props = { summary: WatchingSummary; silentHours: boolean; context: PopoverRuntimeContext };
@@ -33,6 +34,7 @@
       text={`Current client: ${context.clientLabel}. Workspace: ${context.workspaceLabel}. No strong next-step prediction yet.`}
     />
     <PopoverContextBlock {context} />
+    <PredictionWorkSwitcher />
     <PopoverQuickActions cockpitPrimary />
   {/if}
 

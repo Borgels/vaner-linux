@@ -153,8 +153,18 @@ const { subscribe, set }: { subscribe: Readable<FocusState>["subscribe"]; set: (
 const routeStore: { subscribe: Readable<FocusRouteState>["subscribe"]; set: (v: FocusRouteState) => void } = writable(routeFallback);
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let focusInFlight: Promise<void> | null = null;
+let routeInFlight: Promise<void> | null = null;
 
 export async function refreshFocus(): Promise<void> {
+  if (focusInFlight) return focusInFlight;
+  focusInFlight = doRefreshFocus().finally(() => {
+    focusInFlight = null;
+  });
+  return focusInFlight;
+}
+
+async function doRefreshFocus(): Promise<void> {
   try {
     set(await invoke<FocusState>("focus_status"));
   } catch (err) {
@@ -164,6 +174,14 @@ export async function refreshFocus(): Promise<void> {
 }
 
 export async function refreshFocusRoute(): Promise<void> {
+  if (routeInFlight) return routeInFlight;
+  routeInFlight = doRefreshFocusRoute().finally(() => {
+    routeInFlight = null;
+  });
+  return routeInFlight;
+}
+
+async function doRefreshFocusRoute(): Promise<void> {
   try {
     routeStore.set(await invoke<FocusRouteState>("focus_route_status"));
   } catch (err) {

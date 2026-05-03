@@ -62,7 +62,18 @@ pub async fn probe_engine_status() -> EngineStatusOut {
             };
         }
     };
-    let workspace = crate::workspace::resolve_str();
+    let Some(workspace) = crate::workspace::resolve() else {
+        return EngineStatusOut {
+            reachable: false,
+            cli_missing: false,
+            files_watched: 0,
+            sources_count: 0,
+            uptime_minutes: 0,
+            indexing_kind: "idle".to_string(),
+            detail: Some("No Vaner workspace selected.".to_string()),
+        };
+    };
+    let workspace = workspace.to_string_lossy().into_owned();
     let output = match Command::new(&bin)
         .arg("status")
         .arg("--json")

@@ -11,6 +11,7 @@
   import PopoverFooter from "$lib/components/PopoverFooter.svelte";
   import PopoverContextBlock from "./PopoverContextBlock.svelte";
   import PopoverQuickActions from "./PopoverQuickActions.svelte";
+  import PredictionWorkSwitcher from "./PredictionWorkSwitcher.svelte";
   import type { LearningProgress, PopoverRuntimeContext } from "$lib/state/types.js";
 
   type Props = { progress: LearningProgress; context: PopoverRuntimeContext };
@@ -42,6 +43,7 @@
   {/if}
 
   <PopoverContextBlock {context} />
+  <PredictionWorkSwitcher />
   <PopoverQuickActions cockpitPrimary />
 
   {#snippet footer()}

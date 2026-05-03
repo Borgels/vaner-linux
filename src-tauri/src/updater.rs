@@ -67,6 +67,16 @@ pub fn detect_install_kind() -> InstallKind {
     InstallKind::Other
 }
 
+pub fn updater_disabled() -> bool {
+    fn enabled_env(name: &str) -> bool {
+        matches!(
+            std::env::var(name).ok().as_deref(),
+            Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
+        )
+    }
+    enabled_env("VANER_DISABLE_UPDATER") || enabled_env("VANER_DESKTOP_LOCAL_BUILD")
+}
+
 #[tauri::command]
 pub fn update_install_kind() -> InstallKind {
     detect_install_kind()
@@ -100,6 +110,10 @@ fn open_url(url: &str) -> Result<(), String> {
 /// no useful user-facing message for a transient network failure
 /// that the user didn't ask about.
 pub fn spawn_check<R: Runtime>(app: AppHandle<R>) {
+    if updater_disabled() {
+        eprintln!("[vaner-desktop] updater disabled for local build");
+        return;
+    }
     tauri::async_runtime::spawn(async move {
         if let Err(e) = check(app).await {
             // Log at stderr; operators grepping daemon logs will see
@@ -138,6 +152,9 @@ async fn check<R: Runtime>(app: AppHandle<R>) -> Result<(), Box<dyn std::error::
 /// `.deb` users to `update_open_release` instead.
 #[tauri::command]
 pub async fn install_update<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    if updater_disabled() {
+        return Err("updater is disabled for this local build".to_string());
+    }
     if detect_install_kind() == InstallKind::Deb {
         return Err(
             "in-app update is not supported on .deb installs; download the new .deb from the release page"

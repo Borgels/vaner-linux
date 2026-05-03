@@ -2,18 +2,26 @@
   Agents pane — one leverage-status list with install/finish/remove actions.
 -->
 <script lang="ts">
+  import { onMount } from "svelte";
   import V1Kicker from "$lib/components/primitives/V1Kicker.svelte";
   import V1Headline from "$lib/components/primitives/V1Headline.svelte";
   import DocsLink from "$lib/components/primitives/DocsLink.svelte";
   import WizardVerificationPanel from "$lib/components/WizardVerificationPanel.svelte";
   import { install, uninstall } from "$lib/stores/clients.js";
+  import { loadWorkspace, workspacePath } from "$lib/stores/workspace.js";
+
+  const repoRoot = $derived($workspacePath ?? "");
+
+  onMount(() => {
+    void loadWorkspace();
+  });
 
   async function repairClient(clientId: string): Promise<void> {
-    await install(clientId, "", true);
+    await install(clientId, repoRoot, true);
   }
 
   async function removeClient(clientId: string): Promise<void> {
-    await uninstall(clientId, "");
+    await uninstall(clientId, repoRoot);
   }
 </script>
 
@@ -25,7 +33,9 @@
   <V1Headline text="Who can Vaner talk to" size={22} />
 </header>
 
-<WizardVerificationPanel repoRoot="" onRepair={repairClient} onRemove={removeClient} />
+{#key repoRoot}
+  <WizardVerificationPanel {repoRoot} onRepair={repairClient} onRemove={removeClient} />
+{/key}
 
 <style>
   .hd { display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px; }

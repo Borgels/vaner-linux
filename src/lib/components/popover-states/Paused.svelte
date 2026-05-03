@@ -12,14 +12,14 @@
   import V1PrimaryButton from "$lib/components/primitives/V1PrimaryButton.svelte";
   import PopoverFooter from "$lib/components/PopoverFooter.svelte";
   import PopoverContextBlock from "./PopoverContextBlock.svelte";
-  import { isPaused } from "$lib/stores/app-state.js";
+  import { setVanerPaused } from "$lib/stores/app-state.js";
   import type { PopoverRuntimeContext } from "$lib/state/types.js";
 
   type Props = { queued: number; context: PopoverRuntimeContext };
   const { queued, context }: Props = $props();
 
   function resume() {
-    isPaused.set(false);
+    void setVanerPaused(false);
   }
 </script>
 

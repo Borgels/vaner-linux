@@ -123,12 +123,17 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            // The positioner plugin caches the tray icon's bounds so
-            // `Position::TrayCenter` knows where to anchor — without
-            // this hook the cache stays empty and any later
-            // `move_window(TrayCenter)` panics with "Tray position not
-            // set". Call it on every tray event regardless of variant.
-            tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
+            #[cfg(not(target_family = "unix"))]
+            {
+                // The positioner plugin caches the tray icon's bounds so
+                // `Position::TrayCenter` knows where to anchor on platforms
+                // where the tray geometry API is reliable.
+                tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
+            }
+            #[cfg(target_family = "unix")]
+            {
+                let _ = (tray, event);
+            }
         })
         .build(app)?;
     Ok(())
