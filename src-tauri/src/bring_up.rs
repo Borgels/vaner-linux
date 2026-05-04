@@ -123,6 +123,13 @@ pub async fn ensure_engine_running() -> BringUpResult {
         }
     };
 
+    // If the canonical loopback endpoint is silent, clear the workspace's
+    // supervised runtime before starting it again. This handles stale
+    // same-repo processes that still own 8473 but no longer answer HTTP; a
+    // plain `vaner up` would otherwise auto-shift to a fallback port the
+    // desktop does not use.
+    let _ = down_run(&bin, &workspace_str).await;
+
     // Fire `vaner up --detach --json` first. New CLIs (≥ 0.8.9) emit
     // a single line of structured stdout we can use for specific
     // failure messages ("repo root looks wrong", "no [setup] section",
@@ -275,6 +282,20 @@ async fn up_run_legacy(bin: &Path, workspace: &str) -> String {
         Ok(o) if o.status.success() => String::new(),
         Ok(o) => String::from_utf8_lossy(&o.stderr).trim().to_string(),
         Err(e) => format!("could not spawn `vaner up`: {e}"),
+    }
+}
+
+async fn down_run(bin: &Path, workspace: &str) -> String {
+    let output = Command::new(bin)
+        .arg("down")
+        .arg("--path")
+        .arg(workspace)
+        .output()
+        .await;
+    match output {
+        Ok(o) if o.status.success() => String::new(),
+        Ok(o) => String::from_utf8_lossy(&o.stderr).trim().to_string(),
+        Err(e) => format!("could not spawn `vaner down`: {e}"),
     }
 }
 
