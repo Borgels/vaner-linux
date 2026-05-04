@@ -3,7 +3,7 @@
 # Vaner desktop installer.
 #
 # Default behaviour: adds the Vaner apt repository and installs
-# `vaner-desktop` via apt so subsequent `apt upgrade` runs pull
+# `vaner` via apt so subsequent `apt upgrade` runs pull
 # new releases automatically. Falls back to a direct .deb download
 # (with detached-signature verification) if apt / sudo isn't
 # available or the user explicitly opts out.
@@ -18,7 +18,7 @@
 #   VANER_MODE=deb curl -fsSL https://vaner.ai/desktop.sh | bash
 #
 #   # pinned version:
-#   VANER_DESKTOP_VERSION=v0.1.0 VANER_MODE=deb \
+#   VANER_DESKTOP_VERSION=v0.3.1 VANER_MODE=deb \
 #     curl -fsSL https://vaner.ai/desktop.sh | bash
 #
 # Regardless of mode, the script refuses to install unless the
@@ -134,8 +134,8 @@ if [[ "$MODE" == "apt" ]]; then
   echo "→ apt update …"
   sudo apt update
 
-  echo "→ apt install vaner-desktop …"
-  sudo apt install -y vaner-desktop
+  echo "→ apt install vaner …"
+  sudo apt install -y vaner
 
   echo
   echo "Installed via apt. Future releases arrive through \`apt upgrade\`."

@@ -20,7 +20,7 @@
 #   echo "deb [signed-by=/etc/apt/keyrings/vaner.gpg] \
 #        https://apt.vaner.ai stable main" \
 #       | sudo tee /etc/apt/sources.list.d/vaner.list
-#   sudo apt update && sudo apt install vaner-desktop
+#   sudo apt update && sudo apt install vaner
 #
 # Required env:
 #   VANER_RELEASE_GPG_PRIVKEY, VANER_RELEASE_GPG_PASSPHRASE,
@@ -66,7 +66,7 @@ mkdir -p "$repo_root/conf"
 # the loopback-passphrase invocation, which is rock-solid.
 cat > "$repo_root/conf/distributions" <<EOF
 Origin: Vaner
-Label: Vaner Desktop Linux
+Label: Vaner Linux
 Codename: stable
 Suite: stable
 Components: main
@@ -74,7 +74,7 @@ Architectures: amd64
 DebIndices: Packages Release . .gz .bz2
 DscIndices: Sources Release . .gz .bz2
 Tracking: keep includechanges
-Description: Signed apt repository for the Vaner desktop Linux companion.
+Description: Signed apt repository for the Vaner desktop app.
 EOF
 
 cat > "$repo_root/conf/options" <<EOF
@@ -82,15 +82,14 @@ verbose
 basedir $repo_root
 EOF
 
-# Historical package-name rename (2026-04 / pre-0.1.0 release):
-# the desktop client was briefly published as the apt package `vaner`
-# before we reserved that name for the daemon CLI. Evict any stale
-# entry of the old name so an existing clone of gh-pages doesn't keep
-# advertising it. `reprepro remove` is a no-op once the entry is gone.
-echo "→ reprepro remove stable vaner (legacy package name, safe no-op if absent)"
+# Historical package-name rename (2026-05 / pre-users release):
+# the desktop app was briefly published as `vaner-desktop`. The public
+# product install is now `vaner`; the Python engine remains PyPI/pipx
+# `vaner`, and any future apt-packaged CLI should use `vaner-cli`.
+echo "→ reprepro remove stable vaner-desktop (legacy package name, safe no-op if absent)"
 reprepro --basedir "$repo_root" \
          --gnupghome "$gnupghome" \
-         remove stable vaner || true
+         remove stable vaner-desktop || true
 
 # Include each provided .deb. reprepro is idempotent on re-runs for
 # the same version; if we're re-releasing the same .deb it just no-
@@ -139,7 +138,7 @@ cat > "$repo_root/index.html" <<'EOF'
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Vaner Desktop Linux — apt repository</title>
+  <title>Vaner Linux — apt repository</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 680px; margin: 48px auto; padding: 0 20px; line-height: 1.55; color: #1a1720; }
@@ -153,7 +152,7 @@ cat > "$repo_root/index.html" <<'EOF'
 </head>
 <body>
   <h1>vaner<span class="accent">_</span> · apt repository</h1>
-  <p>Signed <code>.deb</code> packages for the Vaner Linux desktop companion.</p>
+  <p>Signed <code>.deb</code> packages for the Vaner desktop app.</p>
 
   <pre><code>curl -fsSL https://apt.vaner.ai/release-key.asc \
   | sudo gpg --dearmor -o /etc/apt/keyrings/vaner.gpg
@@ -162,13 +161,13 @@ echo "deb [signed-by=/etc/apt/keyrings/vaner.gpg] https://apt.vaner.ai stable ma
   | sudo tee /etc/apt/sources.list.d/vaner.list
 
 sudo apt update
-sudo apt install vaner-desktop</code></pre>
+sudo apt install vaner</code></pre>
 
   <p class="hint">Release key fingerprint:
     <code>506B8FA959917D530E5EE7203D219B47A7E4F046</code>
   </p>
   <p class="hint">Source: <a href="https://github.com/Borgels/vaner-desktop">github.com/Borgels/vaner-desktop</a>
-    · Docs: <a href="https://docs.vaner.ai/desktop">docs.vaner.ai/desktop</a></p>
+    · Docs: <a href="https://docs.vaner.ai/getting-started">docs.vaner.ai/getting-started</a></p>
 </body>
 </html>
 EOF

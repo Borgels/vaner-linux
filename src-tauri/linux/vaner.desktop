@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Vaner
+GenericName=AI agent companion
+Comment=Companion for the Vaner predictive-context engine
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories=Utility;
+StartupNotify=true
+StartupWMClass=vaner-desktop
+Keywords=Vaner;AI;MCP;agent;assistant;developer;local;

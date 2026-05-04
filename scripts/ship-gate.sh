@@ -67,11 +67,27 @@ step "apt install the .deb"
 sudo apt install -y "$DEB_PATH" >"$LOG_DIR/apt-install.log" 2>&1 \
   || { tail -40 "$LOG_DIR/apt-install.log" >&2; fail "apt install failed"; }
 
-# Sanity: the .desktop file got placed.
-if ! find /usr/share/applications -maxdepth 1 -name "*vaner*.desktop" | grep -q .; then
-  fail "no .desktop file found after install"
+# Sanity: the visible app launcher got placed.
+mapfile -t desktop_files < <(find /usr/share/applications -maxdepth 1 -iname "*vaner*.desktop" -print | sort)
+[[ "${#desktop_files[@]}" -gt 0 ]] || fail "no .desktop file found after install"
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  for candidate in "${desktop_files[@]}"; do
+    desktop-file-validate "$candidate"
+  done
 fi
-echo "  desktop file: installed"
+visible_desktop_files=()
+for candidate in "${desktop_files[@]}"; do
+  if ! grep -qx 'NoDisplay=true' "$candidate"; then
+    visible_desktop_files+=("$candidate")
+  fi
+done
+[[ "${#visible_desktop_files[@]}" -eq 1 ]] || fail "expected one visible Vaner desktop launcher, found ${#visible_desktop_files[@]}"
+desktop_file="${visible_desktop_files[0]}"
+desktop_name=$(basename "$desktop_file")
+[[ "$desktop_name" != *" "* ]] || fail "desktop file name contains spaces: $desktop_name"
+grep -qx 'Name=Vaner' "$desktop_file" || fail "desktop launcher does not display as Vaner"
+grep -qx 'StartupNotify=true' "$desktop_file" || fail "desktop launcher lacks StartupNotify=true"
+echo "  desktop file: installed ($desktop_name)"
 
 # Sanity: the binary is on PATH.
 command -v vaner-desktop >/dev/null 2>&1 \
