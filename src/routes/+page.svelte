@@ -56,13 +56,13 @@
   {:else if $vanerState.kind === "installedNotConnected"}
     <InstalledNotConnected />
   {:else if $vanerState.kind === "learning"}
-    <Learning progress={$vanerState.progress} />
+    <Learning progress={$vanerState.progress} context={$vanerState.context} />
   {:else if $vanerState.kind === "watching"}
-    <Watching summary={$vanerState.summary} silentHours={$vanerState.silentHours} />
+    <Watching summary={$vanerState.summary} silentHours={$vanerState.silentHours} context={$vanerState.context} />
   {:else if $vanerState.kind === "prepared"}
-    <Prepared lead={$vanerState.lead} supporting={$vanerState.supporting} />
+    <Prepared lead={$vanerState.lead} supporting={$vanerState.supporting} context={$vanerState.context} />
   {:else if $vanerState.kind === "preparedWork"}
-    <PreparedWork cards={$vanerState.cards} />
+    <PreparedWork cards={$vanerState.cards} context={$vanerState.context} />
   {:else if $vanerState.kind === "attention"}
     <Attention conflict={$vanerState.conflict} />
   {:else if $vanerState.kind === "permissionNeeded"}
@@ -73,11 +73,11 @@
       suggestedLaunch={$vanerState.suggestedLaunch}
     />
   {:else if $vanerState.kind === "activePredictions"}
-    <ActivePredictions predictions={$vanerState.predictions} />
+    <ActivePredictions predictions={$vanerState.predictions} context={$vanerState.context} />
   {:else if $vanerState.kind === "error"}
     <VanerError engine={$vanerState.engine} />
   {:else if $vanerState.kind === "paused"}
-    <Paused queued={$vanerState.queued} />
+    <Paused queued={$vanerState.queued} context={$vanerState.context} />
   {:else}
     <Idle />
   {/if}

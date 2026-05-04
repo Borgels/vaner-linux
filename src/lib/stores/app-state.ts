@@ -1,5 +1,6 @@
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 import { emit, listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./toast.js";
 
 /**
@@ -40,16 +41,27 @@ export const needsAppIndicator = writable<boolean>(false);
 
 let bootstrapped = false;
 
+export async function setVanerPaused(paused: boolean): Promise<void> {
+  isPaused.set(paused);
+  try {
+    await invoke("focus_action", { action: paused ? "pause_all" : "resume" });
+  } catch (err) {
+    console.warn("[vaner] pause/resume daemon action failed:", err);
+    showToast(
+      paused ? "Pause state saved, but daemon did not respond" : "Resume state saved, but daemon did not respond",
+      "attention",
+    );
+  }
+}
+
 export async function bootstrapAppStateListeners(): Promise<void> {
   if (bootstrapped) return;
   bootstrapped = true;
 
   await listen<void>("menu:toggle-pause", () => {
-    isPaused.update((p) => {
-      const next = !p;
-      showToast(next ? "Vaner paused" : "Vaner resumed", "info");
-      return next;
-    });
+    const next = !get(isPaused);
+    showToast(next ? "Vaner paused" : "Vaner resumed", "info");
+    void setVanerPaused(next);
   });
 
   await listen<void>("menu:open-preferences", async () => {

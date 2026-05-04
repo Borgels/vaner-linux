@@ -150,7 +150,7 @@
 <header class="hd">
   <div class="kicker-row">
     <V1Kicker text="Preferences" />
-    <DocsLink path="/docs/policy-bundles" />
+    <DocsLink path="/policy-bundles" />
   </div>
   <V1Headline text="How Vaner sounds and when it speaks" size={22} />
 </header>

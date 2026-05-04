@@ -15,12 +15,13 @@
   import PermissionNeeded from "$lib/components/popover-states/PermissionNeeded.svelte";
   import NoActiveAgent from "$lib/components/popover-states/NoActiveAgent.svelte";
   import ActivePredictions from "$lib/components/popover-states/ActivePredictions.svelte";
+  import PreparedWork from "$lib/components/popover-states/PreparedWork.svelte";
   import VanerError from "$lib/components/popover-states/Error.svelte";
   import Idle from "$lib/components/popover-states/Idle.svelte";
   import Paused from "$lib/components/popover-states/Paused.svelte";
   import NotWiredToAnyClient from "$lib/components/popover-states/NotWiredToAnyClient.svelte";
   import OllamaMissing from "$lib/components/popover-states/OllamaMissing.svelte";
-  import type { PreparedMoment, SourceRef } from "$lib/state/types.js";
+  import type { PopoverRuntimeContext, PreparedMoment, SourceRef } from "$lib/state/types.js";
 
   const STATES = [
     "notWiredToAnyClient",
@@ -31,6 +32,7 @@
     "learning",
     "watching",
     "prepared",
+    "preparedWork",
     "attention",
     "permissionNeeded",
     "noActiveAgent",
@@ -96,6 +98,18 @@
     },
   ];
 
+  const context: PopoverRuntimeContext = {
+    clientLabel: "Cursor",
+    workspaceLabel: "vaner",
+    signalLabels: ["editor", "MCP context", "recent activity", "docs"],
+    predictionsReady: 2,
+    predictionsWarming: 4,
+    preparedReady: 1,
+    preparedPartial: 2,
+    lastUpdateLabel: "10s ago",
+    statusLabel: "Learning",
+  };
+
   const kind = $derived($page.url.searchParams.get("kind"));
 </script>
 
@@ -140,6 +154,7 @@
               { source: "linear", title: "VAN-104 redesign popover states", since: "8m" },
             ],
           }}
+          {context}
         />
       {:else if kind === "watching"}
         <Watching
@@ -151,9 +166,35 @@
             lastPreparedAgo: "2h ago",
           }}
           silentHours={false}
+          {context}
         />
       {:else if kind === "prepared"}
-        <Prepared {lead} {supporting} />
+        <Prepared {lead} {supporting} {context} />
+      {:else if kind === "preparedWork"}
+        <PreparedWork
+          {context}
+          cards={[
+            {
+              id: "work-1",
+              source_id: "work-1",
+              source_type: "work_product",
+              kind: "bug",
+              title: "Potential setup drift in agent wiring",
+              summary: "Claude Code and Codex CLI appear configured, but verification says required layers are missing.",
+              badge: "Bug",
+              confidence_label: "High",
+              freshness_label: "Fresh",
+              freshness_state: "fresh",
+              target_label: "Agents setup",
+              why_prepared: "Recent setup actions and client verification results disagree.",
+              evidence_count: 4,
+              created_at: Date.now(),
+              updated_at: Date.now(),
+              primary_action: { kind: "inspect", label: "Inspect", tool: null, endpoint: "/work-products/work-1/inspect", arguments: {} },
+              secondary_actions: [],
+            },
+          ]}
+        />
       {:else if kind === "attention"}
         <Attention
           conflict={{
@@ -185,6 +226,7 @@
         />
       {:else if kind === "activePredictions"}
         <ActivePredictions
+          {context}
           predictions={[
             {
               id: "p1",
@@ -209,7 +251,7 @@
           }}
         />
       {:else if kind === "paused"}
-        <Paused queued={3} />
+        <Paused queued={3} {context} />
       {:else if kind === "idle"}
         <Idle />
       {:else}

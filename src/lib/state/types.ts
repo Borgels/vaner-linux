@@ -148,6 +148,18 @@ export interface WatchingSummary {
   lastPreparedAgo: string | null;
 }
 
+export interface PopoverRuntimeContext {
+  clientLabel: string;
+  workspaceLabel: string;
+  signalLabels: string[];
+  predictionsReady: number;
+  predictionsWarming: number;
+  preparedReady: number;
+  preparedPartial: number;
+  lastUpdateLabel: string;
+  statusLabel: string;
+}
+
 // -----------------------------------------------------------------------------
 // VanerState — discriminated union driven by the reducer
 // -----------------------------------------------------------------------------
@@ -174,16 +186,16 @@ export type VanerState =
   | { kind: "notWiredToAnyClient"; detected: ClientDetectStatus }
   | { kind: "ollamaMissing"; installed: boolean; detail: string }
   | { kind: "installedNotConnected" }
-  | { kind: "learning"; progress: LearningProgress }
-  | { kind: "watching"; summary: WatchingSummary; silentHours: boolean }
-  | { kind: "prepared"; lead: PreparedMoment; supporting: PreparedMoment[] }
-  | { kind: "preparedWork"; cards: PreparedWorkCard[] }
+  | { kind: "learning"; progress: LearningProgress; context: PopoverRuntimeContext }
+  | { kind: "watching"; summary: WatchingSummary; silentHours: boolean; context: PopoverRuntimeContext }
+  | { kind: "prepared"; lead: PreparedMoment; supporting: PreparedMoment[]; context: PopoverRuntimeContext }
+  | { kind: "preparedWork"; cards: PreparedWorkCard[]; context: PopoverRuntimeContext }
   | { kind: "attention"; conflict: ConflictSummary }
   | { kind: "permissionNeeded"; sources: SourceStatus[] }
   | { kind: "noActiveAgent"; pendingCount: number; suggestedLaunch: AgentSuggestion[] }
-  | { kind: "activePredictions"; predictions: PredictedPrompt[] }
+  | { kind: "activePredictions"; predictions: PredictedPrompt[]; context: PopoverRuntimeContext }
   | { kind: "error"; engine: EngineError }
-  | { kind: "paused"; queued: number }
+  | { kind: "paused"; queued: number; context: PopoverRuntimeContext }
   | { kind: "idle" };
 
 export type VanerStateKind = VanerState["kind"];

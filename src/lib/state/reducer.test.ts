@@ -55,6 +55,11 @@ const baseInputs = (override: Partial<ReducerInputs> = {}): ReducerInputs => ({
   clientDetect: { total: 4, wiredCount: 1, wiredLabels: ["Cursor"] },
   activePredictions: [],
   preparedWork: [],
+  activity: {
+    clientLabel: "Cursor",
+    workspaceLabel: "vaner",
+    signalLabels: ["editor", "MCP context", "recent activity"],
+  },
   noAgentSuggestions: [],
   paused: false,
   // Ollama is the local-first default backend. Default to "installed
@@ -346,6 +351,9 @@ describe("StateReducer precedence chain", () => {
     expect(out.kind).toBe("watching");
     if (out.kind === "watching") {
       expect(out.silentHours).toBe(false);
+      expect(out.context.clientLabel).toBe("Cursor");
+      expect(out.context.workspaceLabel).toBe("vaner");
+      expect(out.context.signalLabels).toContain("MCP context");
     }
   });
 

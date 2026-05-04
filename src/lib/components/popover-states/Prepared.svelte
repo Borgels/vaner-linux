@@ -11,14 +11,17 @@
   import V1GhostButton from "$lib/components/primitives/V1GhostButton.svelte";
   import SourceGlyph from "$lib/components/primitives/SourceGlyph.svelte";
   import PopoverFooter from "$lib/components/PopoverFooter.svelte";
+  import PopoverContextBlock from "./PopoverContextBlock.svelte";
+  import PopoverQuickActions from "./PopoverQuickActions.svelte";
   import { showToast } from "$lib/stores/toast.js";
-  import type { PreparedMoment } from "$lib/state/types.js";
+  import type { PopoverRuntimeContext, PreparedMoment } from "$lib/state/types.js";
 
   type Props = {
     lead: PreparedMoment;
     supporting: PreparedMoment[];
+    context: PopoverRuntimeContext;
   };
-  const { lead, supporting }: Props = $props();
+  const { lead, supporting, context }: Props = $props();
 
   const minutesAgo = $derived(
     Math.max(0, Math.floor((Date.now() - lead.readyAt) / 60_000)),
@@ -105,8 +108,11 @@
     </div>
   {/if}
 
+  <PopoverContextBlock {context} compact />
+  <PopoverQuickActions cockpitPrimary={false} tab="prepared" />
+
   {#snippet footer()}
-    <PopoverFooter health="on" healthLabel={`${lead.sources.length} sources`} />
+    <PopoverFooter health="on" healthLabel={`Last update ${context.lastUpdateLabel}`} detailsTab="prepared" />
   {/snippet}
 </QuietShell>
 

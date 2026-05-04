@@ -19,6 +19,9 @@
   import { showToast } from "$lib/stores/toast.js";
 
   let appVersion = $state<string>("…");
+  let runtime = $state<Record<string, unknown> | null>(null);
+  const frontendBuild = __APP_BUILD_ID__;
+  const frontendBuiltAt = __APP_BUILD_TIME__;
   let actionDetail = $state<string | null>(null);
 
   onMount(async () => {
@@ -27,9 +30,14 @@
     } catch {
       appVersion = "unknown";
     }
+    try {
+      runtime = await invoke<Record<string, unknown>>("diagnostics_runtime");
+    } catch {
+      runtime = null;
+    }
   });
 
-  async function runAction(name: "diagnostics_status" | "diagnostics_doctor" | "diagnostics_restart_engine" | "diagnostics_upgrade_engine") {
+  async function runAction(name: "diagnostics_runtime" | "diagnostics_status" | "diagnostics_doctor" | "diagnostics_restart_engine" | "diagnostics_upgrade_engine") {
     actionDetail = "Working…";
     try {
       const result = await invoke<unknown>(name);
@@ -45,7 +53,7 @@
 <header class="hd">
   <div class="kicker-row">
     <V1Kicker text="Diagnostics" />
-    <DocsLink path="/docs/troubleshooting" />
+    <DocsLink path="/troubleshooting" />
   </div>
   <V1Headline text="Help me help you" size={22} />
   <V1Body
@@ -57,7 +65,12 @@
 <section class="block">
   <VSectionLabel text="App" />
   <div class="kv">
-    <span>Desktop app</span><span>{appVersion}</span>
+    <span>Desktop shell</span><span>{appVersion}</span>
+    <span>Local build</span><span>{runtime?.local_build ? "yes" : "no"}</span>
+    <span>Updater</span><span>{runtime?.updater_disabled ? "disabled" : "enabled"}</span>
+    <span>AppImage</span><span>{runtime?.appimage ?? "not AppImage"}</span>
+    <span>Frontend build</span><span>{frontendBuild}</span>
+    <span>Built at</span><span>{frontendBuiltAt}</span>
   </div>
 </section>
 
@@ -68,6 +81,9 @@
     <span>Files watched</span><span>{$engineStatus.filesWatched}</span>
     <span>Sources</span><span>{$engineStatus.sourcesCount}</span>
     <span>Uptime</span><span>{$engineStatus.uptimeMinutes}m</span>
+    <span>Workspace</span><span>{runtime?.workspace ?? "not selected"}</span>
+    <span>CLI</span><span>{runtime?.vaner_bin ?? "not found"}</span>
+    <span>CLI version</span><span>{runtime?.cli_version ?? "unknown"}</span>
   </div>
 </section>
 
@@ -75,6 +91,7 @@
   <VSectionLabel text="Actions" />
   <div class="actions">
     <V1PrimaryButton title="Run doctor" onclick={() => runAction("diagnostics_doctor")} />
+    <V1GhostButton title="Runtime" onclick={() => runAction("diagnostics_runtime")} />
     <V1GhostButton title="Check status" onclick={() => runAction("diagnostics_status")} />
     <V1GhostButton title="Restart engine" onclick={() => runAction("diagnostics_restart_engine")} />
     <V1GhostButton title="Update engine" onclick={() => runAction("diagnostics_upgrade_engine")} />

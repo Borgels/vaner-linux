@@ -11,6 +11,13 @@ use vaner_contract::{EngineClient, EngineClientError, PredictedPrompt, stash_ado
 use crate::AppState;
 use crate::prepared_work_endpoint::validate_prepared_work_endpoint;
 
+fn loopback_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| format!("could not build HTTP client: {e}"))
+}
+
 /// `Quit` from the companion sidebar (and any other "exit Vaner"
 /// affordance the UI surfaces). The companion's `window.close()`
 /// only hides the companion webview — it does not exit the app —
@@ -41,10 +48,108 @@ pub async fn active_predictions(
 }
 
 #[tauri::command]
+pub async fn prediction_overview(limit: Option<u16>) -> Result<Vec<serde_json::Value>, String> {
+    let capped = limit.unwrap_or(24).clamp(1, 50) as usize;
+    let body: serde_json::Value = loopback_client()?
+        .get("http://127.0.0.1:8473/predictions/active?include_all=true")
+        .send()
+        .await
+        .map_err(|_| "Vaner is unreachable. Is the daemon running?".to_string())?
+        .error_for_status()
+        .map_err(|e| format!("prediction overview request failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("prediction overview decode failed: {e}"))?;
+
+    let mut seen = std::collections::HashSet::<String>::new();
+    let mut rows = Vec::<serde_json::Value>::new();
+    let mut push_row = |value: &serde_json::Value| {
+        let Some(id) = value.get("id").and_then(|id| id.as_str()) else {
+            return;
+        };
+        if seen.insert(id.to_string()) {
+            rows.push(value.clone());
+        }
+    };
+
+    if let Some(predictions) = body.get("predictions").and_then(|value| value.as_array()) {
+        for prediction in predictions {
+            push_row(prediction);
+        }
+    }
+    if let Some(by_state) = body.get("by_state").and_then(|value| value.as_object()) {
+        for readiness in [
+            "ready",
+            "drafting",
+            "evidence_gathering",
+            "grounding",
+            "queued",
+            "stale",
+        ] {
+            if let Some(group) = by_state.get(readiness).and_then(|value| value.as_array()) {
+                for prediction in group {
+                    push_row(prediction);
+                }
+            }
+        }
+    }
+
+    fn readiness_rank(value: &serde_json::Value) -> u8 {
+        match value
+            .get("run")
+            .and_then(|run| run.get("readiness"))
+            .and_then(|readiness| readiness.as_str())
+            .unwrap_or("queued")
+        {
+            "ready" => 0,
+            "drafting" => 1,
+            "evidence_gathering" => 2,
+            "grounding" => 3,
+            "queued" => 4,
+            "stale" => 5,
+            _ => 6,
+        }
+    }
+    fn confidence(value: &serde_json::Value) -> f64 {
+        value
+            .get("spec")
+            .and_then(|spec| spec.get("confidence"))
+            .and_then(|confidence| confidence.as_f64())
+            .unwrap_or(0.0)
+    }
+    fn updated_at(value: &serde_json::Value) -> f64 {
+        value
+            .get("run")
+            .and_then(|run| run.get("updated_at"))
+            .and_then(|updated_at| updated_at.as_f64())
+            .unwrap_or(0.0)
+    }
+
+    rows.sort_by(|lhs, rhs| {
+        readiness_rank(lhs)
+            .cmp(&readiness_rank(rhs))
+            .then_with(|| {
+                confidence(rhs)
+                    .partial_cmp(&confidence(lhs))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                updated_at(rhs)
+                    .partial_cmp(&updated_at(lhs))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+    rows.truncate(capped);
+    Ok(rows)
+}
+
+#[tauri::command]
 pub async fn prepared_work(limit: Option<u16>) -> Result<Vec<serde_json::Value>, String> {
     let capped = limit.unwrap_or(3).clamp(1, 12);
     let url = format!("http://127.0.0.1:8473/prepared-work?surface=desktop&limit={capped}");
-    let body: serde_json::Value = reqwest::get(url)
+    let body: serde_json::Value = loopback_client()?
+        .get(url)
+        .send()
         .await
         .map_err(|_| "Vaner is unreachable. Is the daemon running?".to_string())?
         .error_for_status()
@@ -67,7 +172,7 @@ pub async fn prepared_work_action(
 ) -> Result<serde_json::Value, String> {
     validate_prepared_work_endpoint(&endpoint).map_err(str::to_string)?;
     let url = format!("http://127.0.0.1:8473{endpoint}");
-    let client = reqwest::Client::new();
+    let client = loopback_client()?;
     let request = if kind == "inspect" {
         client.get(url)
     } else if kind == "feedback" {
@@ -91,6 +196,114 @@ pub async fn prepared_work_action(
         .json()
         .await
         .map_err(|e| format!("prepared work response decode failed: {e}"))
+}
+
+#[tauri::command]
+pub async fn focus_status() -> Result<serde_json::Value, String> {
+    loopback_client()?
+        .get("http://127.0.0.1:8473/focus")
+        .send()
+        .await
+        .map_err(|_| "Vaner is unreachable. Is the daemon running?".to_string())?
+        .error_for_status()
+        .map_err(|e| format!("focus request failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("focus decode failed: {e}"))
+}
+
+#[tauri::command]
+pub async fn focus_route_status() -> Result<serde_json::Value, String> {
+    loopback_client()?
+        .get("http://127.0.0.1:8473/focus/route")
+        .send()
+        .await
+        .map_err(|_| "Vaner is unreachable. Is the daemon running?".to_string())?
+        .error_for_status()
+        .map_err(|e| format!("focus route request failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("focus route decode failed: {e}"))
+}
+
+#[tauri::command]
+pub async fn focus_route_update(payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    let body = payload.as_object().cloned().unwrap_or_default();
+    loopback_client()?
+        .post("http://127.0.0.1:8473/focus/route")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|_| "Vaner is unreachable. Is the daemon running?".to_string())?
+        .error_for_status()
+        .map_err(|e| format!("focus route update failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("focus route decode failed: {e}"))
+}
+
+#[tauri::command]
+pub async fn focus_action(
+    action: String,
+    path: Option<String>,
+    mode: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let endpoint = match action.as_str() {
+        "work_here" => "/focus/workspaces/current/work-here",
+        "pin" => "/focus/workspaces/current/pin",
+        "unpin" => "/focus/workspaces/current/unpin",
+        "pause" => "/focus/workspaces/current/pause",
+        "resume" => "/focus/workspaces/current/resume",
+        "pause_all" => "/focus/pause-all",
+        "mode" => "/focus/mode",
+        _ => return Err("unknown focus action".to_string()),
+    };
+    let mut payload = serde_json::Map::new();
+    if let Some(path) = path {
+        payload.insert("path".to_string(), serde_json::Value::String(path));
+    }
+    if let Some(mode) = mode {
+        payload.insert("mode".to_string(), serde_json::Value::String(mode));
+    }
+    loopback_client()?
+        .post(format!("http://127.0.0.1:8473{endpoint}"))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|_| "Vaner is unreachable. Is the daemon running?".to_string())?
+        .error_for_status()
+        .map_err(|e| format!("focus action failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("focus decode failed: {e}"))
+}
+
+#[tauri::command]
+pub async fn resources_status() -> Result<serde_json::Value, String> {
+    loopback_client()?
+        .get("http://127.0.0.1:8473/resources")
+        .send()
+        .await
+        .map_err(|_| "Vaner is unreachable. Is the daemon running?".to_string())?
+        .error_for_status()
+        .map_err(|e| format!("resources request failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("resources decode failed: {e}"))
+}
+
+#[tauri::command]
+pub async fn jobs_status() -> Result<serde_json::Value, String> {
+    loopback_client()?
+        .get("http://127.0.0.1:8473/jobs")
+        .send()
+        .await
+        .map_err(|_| "Vaner is unreachable. Is the daemon running?".to_string())?
+        .error_for_status()
+        .map_err(|e| format!("jobs request failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("jobs decode failed: {e}"))
 }
 
 /// Adopt flow:

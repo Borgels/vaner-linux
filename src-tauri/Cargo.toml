@@ -1,6 +1,6 @@
 [package]
 name = "vaner-desktop"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Cross-platform (Linux + Windows) desktop companion for the Vaner predictive-context engine."

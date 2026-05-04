@@ -11,13 +11,15 @@
   import V1Body from "$lib/components/primitives/V1Body.svelte";
   import V1PrimaryButton from "$lib/components/primitives/V1PrimaryButton.svelte";
   import PopoverFooter from "$lib/components/PopoverFooter.svelte";
-  import { isPaused } from "$lib/stores/app-state.js";
+  import PopoverContextBlock from "./PopoverContextBlock.svelte";
+  import { setVanerPaused } from "$lib/stores/app-state.js";
+  import type { PopoverRuntimeContext } from "$lib/state/types.js";
 
-  type Props = { queued: number };
-  const { queued }: Props = $props();
+  type Props = { queued: number; context: PopoverRuntimeContext };
+  const { queued, context }: Props = $props();
 
   function resume() {
-    isPaused.set(false);
+    void setVanerPaused(false);
   }
 </script>
 
@@ -39,8 +41,10 @@
     <V1PrimaryButton title="Resume" onclick={resume} />
   </div>
 
+  <PopoverContextBlock {context} compact />
+
   {#snippet footer()}
-    <PopoverFooter health="idle" healthLabel={queued > 0 ? `${queued} queued` : "Standing by"} />
+    <PopoverFooter health="idle" healthLabel={queued > 0 ? `${queued} queued` : "Paused"} detailsTab="prepared" />
   {/snippet}
 </QuietShell>
 

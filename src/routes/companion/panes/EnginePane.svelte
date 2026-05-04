@@ -238,7 +238,7 @@
 <header class="hd">
   <div class="kicker-row">
     <V1Kicker text="Engine" />
-    <DocsLink path="/docs/architecture" />
+    <DocsLink path="/architecture" />
   </div>
   <V1Headline text="The local background process" size={22} />
   <V1Body muted text="Runs on your machine. Answers your agents." />

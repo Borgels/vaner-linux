@@ -22,10 +22,11 @@
   };
 
   const { path, label = "Docs" }: Props = $props();
+  const docsPath = $derived(path.replace(/^\/docs(?=\/|$)/, ""));
 
   async function open() {
     const base = "https://docs.vaner.ai";
-    const url = path.startsWith("http") ? path : `${base}${path}`;
+    const url = path.startsWith("http") ? path : `${base}${docsPath || "/"}`;
     try {
       await invoke("open_external_url", { url });
     } catch (err) {

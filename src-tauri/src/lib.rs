@@ -85,7 +85,6 @@ fn strip_appimage_env() {
             "LD_LIBRARY_PATH",
             "LD_PRELOAD",
             "APPDIR",
-            "APPIMAGE",
             "ARGV0",
             "GIO_MODULE_DIR",
             "GTK_PATH",
@@ -231,6 +230,21 @@ pub fn run() {
             // without extra setup, nudge the user now.
             session::first_run_nudge(app.handle());
 
+            // Local AppImage smoke builds are often launched from a
+            // terminal on Linux shells where the tray icon is delayed or
+            // hidden by the desktop environment. Show the popover once
+            // explicitly so the build is testable without hunting for a
+            // tray affordance. Production keeps tray-first behavior unless
+            // the user/exported launcher requests the same override.
+            if std::env::var("VANER_DESKTOP_SHOW_ON_START").ok().as_deref() == Some("1")
+                || std::env::var("VANER_DESKTOP_LOCAL_BUILD").ok().as_deref() == Some("1")
+            {
+                let show_app = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = popover::show(&show_app);
+                });
+            }
+
             // Background update check. Emits `update:available` when
             // a new release is on GitHub and its minisign signature
             // verifies against the pubkey in tauri.conf.json. Failure
@@ -253,8 +267,15 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::active_predictions,
+            commands::prediction_overview,
             commands::prepared_work,
             commands::prepared_work_action,
+            commands::focus_status,
+            commands::focus_route_status,
+            commands::focus_route_update,
+            commands::focus_action,
+            commands::resources_status,
+            commands::jobs_status,
             commands::adopt_prediction,
             commands::app_quit,
             commands::window_hide,
@@ -265,6 +286,7 @@ pub fn run() {
             popover::popover_toggle_pinned,
             popover::popover_is_pinned,
             diagnostics::diagnostics_status,
+            diagnostics::diagnostics_runtime,
             diagnostics::diagnostics_doctor,
             diagnostics::diagnostics_restart_engine,
             diagnostics::diagnostics_upgrade_engine,

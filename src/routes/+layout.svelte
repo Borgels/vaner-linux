@@ -22,6 +22,7 @@
     startOllamaHealthListener,
     stopOllamaHealthListener,
   } from "$lib/stores/ollama-health.js";
+  import { startFocusPolling, stopFocusPolling } from "$lib/stores/focus.js";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { showToast } from "$lib/stores/toast.js";
 
@@ -73,6 +74,7 @@
     // these returning errors (the stores keep their last value).
     startEngineStatusPolling();
     startAgentDetectorPolling();
+    startFocusPolling();
     void startOllamaHealthListener();
 
     // Probe MCP-client integrations. The reducer routes the popover
@@ -116,6 +118,7 @@
   onDestroy(() => {
     stopEngineStatusPolling();
     stopAgentDetectorPolling();
+    stopFocusPolling();
     stopOllamaHealthListener();
     bringUpUnlisten?.();
     void disposeDaemonAudit();

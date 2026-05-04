@@ -14,6 +14,7 @@ import type {
   ClientDetectStatus,
   EngineStatus,
   LearningProgress,
+  PopoverRuntimeContext,
   PreparedList,
   SourceStatus,
   VanerState,
@@ -46,6 +47,11 @@ export interface ReducerInputs {
    *  that haven't been updated to the new shape. */
   activePredictions: PredictedPrompt[];
   preparedWork: PreparedWorkCard[];
+  activity: {
+    clientLabel: string;
+    workspaceLabel: string;
+    signalLabels: string[];
+  };
   /** Suggested agents to launch when noActiveAgent fires. Equivalent
    *  to the macOS `PreviewData.noAgentSuggestions` constant; injected
    *  here so the reducer stays pure (no static-data import). */
@@ -55,6 +61,58 @@ export interface ReducerInputs {
    *  permissionNeeded, attention, engineMissing) still show through
    *  so the user isn't silenced into a broken engine. */
   paused: boolean;
+}
+
+function normalizeEpochMs(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null;
+  return value > 1_000_000_000_000 ? value : value * 1000;
+}
+
+function formatLastUpdate(status: EngineStatus, predictions: PredictedPrompt[], work: PreparedWorkCard[]): string {
+  if (status.lastCycleSecondsAgo != null) {
+    if (status.lastCycleSecondsAgo <= 5) return "just now";
+    if (status.lastCycleSecondsAgo < 60) return `${status.lastCycleSecondsAgo}s ago`;
+    return `${Math.round(status.lastCycleSecondsAgo / 60)}m ago`;
+  }
+
+  const newest = [
+    ...predictions.map((p) => normalizeEpochMs(p.run.updated_at ?? p.spec.created_at)),
+    ...work.map((card) => normalizeEpochMs(card.updated_at || card.created_at)),
+  ].filter((v): v is number => v != null).sort((a, b) => b - a)[0];
+
+  if (!newest) return "just now";
+  const seconds = Math.max(0, Math.round((Date.now() - newest) / 1000));
+  if (seconds <= 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  return `${Math.round(seconds / 3600)}h ago`;
+}
+
+function isPreparedCardReady(card: PreparedWorkCard): boolean {
+  const freshness = (card.freshness_state ?? "").toLowerCase();
+  const confidence = card.confidence_label.toLowerCase();
+  if (freshness === "stale" || freshness === "possibly_stale") return false;
+  if (confidence.includes("low")) return false;
+  return true;
+}
+
+function runtimeContext(i: ReducerInputs, statusLabel: string): PopoverRuntimeContext {
+  const predictionsReady = i.activePredictions.filter((p) => p.run.readiness === "ready").length;
+  const predictionsWarming = Math.max(0, i.activePredictions.length - predictionsReady);
+  const preparedReady = i.preparedWork.filter(isPreparedCardReady).length + (i.prepared.lead ? 1 : 0);
+  const preparedPartial = i.preparedWork.length - i.preparedWork.filter(isPreparedCardReady).length + i.prepared.supporting.length;
+
+  return {
+    clientLabel: i.activity.clientLabel || "none detected",
+    workspaceLabel: i.activity.workspaceLabel || "unknown",
+    signalLabels: i.activity.signalLabels.length ? i.activity.signalLabels : ["recent activity"],
+    predictionsReady,
+    predictionsWarming,
+    preparedReady,
+    preparedPartial,
+    lastUpdateLabel: formatLastUpdate(i.status, i.activePredictions, i.preparedWork),
+    statusLabel,
+  };
 }
 
 export function reduce(i: ReducerInputs): VanerState {
@@ -135,7 +193,7 @@ export function reduce(i: ReducerInputs): VanerState {
       i.activePredictions.filter((p) => isAdoptable(p.run.readiness)).length +
       (i.prepared.lead ? 1 : 0) +
       i.prepared.supporting.length;
-    return { kind: "paused", queued };
+    return { kind: "paused", queued, context: runtimeContext(i, "Paused") };
   }
 
   // 4. Currently learning → .learning
@@ -146,11 +204,11 @@ export function reduce(i: ReducerInputs): VanerState {
       currentlyReading: i.status.indexing.currentlyReading,
       etaMinutes: i.status.indexing.etaMinutes,
     };
-    return { kind: "learning", progress };
+    return { kind: "learning", progress, context: runtimeContext(i, "Learning") };
   }
 
   if (i.preparedWork.length > 0) {
-    return { kind: "preparedWork", cards: i.preparedWork };
+    return { kind: "preparedWork", cards: i.preparedWork, context: runtimeContext(i, "Ready") };
   }
 
   // 5. 0.8.0 — predictions in drafting/ready outrank a reactive
@@ -174,7 +232,7 @@ export function reduce(i: ReducerInputs): VanerState {
       }
       return rhs.spec.confidence - lhs.spec.confidence;
     });
-    return { kind: "activePredictions", predictions: sorted };
+    return { kind: "activePredictions", predictions: sorted, context: runtimeContext(i, "Preparing") };
   }
 
   // 6. Reactive prepared moment(s) exist → .prepared (or .noActiveAgent
@@ -191,6 +249,7 @@ export function reduce(i: ReducerInputs): VanerState {
       kind: "prepared",
       lead: i.prepared.lead,
       supporting: i.prepared.supporting,
+      context: runtimeContext(i, "Ready"),
     };
   }
 
@@ -202,5 +261,5 @@ export function reduce(i: ReducerInputs): VanerState {
     currentlyReading: [],
     lastPreparedAgo: null,
   };
-  return { kind: "watching", summary, silentHours: i.silentHours };
+  return { kind: "watching", summary, silentHours: i.silentHours, context: runtimeContext(i, "Learning") };
 }

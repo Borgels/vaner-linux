@@ -55,6 +55,7 @@
      *  ``partial`` or ``missing`` state. The wizard wires this to
      *  ``clients_install`` for the matching id. */
     onRepair?: (clientId: string) => void | Promise<void>;
+    onRemove?: (clientId: string) => void | Promise<void>;
     /** "select" surfaces a checkbox-driven opt-in flow with a single
      *  "Install Vaner into selected" button — the right framing during
      *  onboarding, when the user hasn't installed Vaner anywhere yet
@@ -66,7 +67,7 @@
     mode?: "select" | "verify";
   };
 
-  const { repoRoot, onRepair, mode = "verify" }: Props = $props();
+  const { repoRoot, onRepair, onRemove, mode = "verify" }: Props = $props();
 
   let results = $state<ClientVerification[]>([]);
   let loading = $state(true);
@@ -266,6 +267,23 @@
       busy = { ...busy, [clientId]: false };
     }
   }
+
+  async function handleRemove(clientId: string) {
+    if (!onRemove) return;
+    busy = { ...busy, [clientId]: true };
+    try {
+      await onRemove(clientId);
+      await reverifyOne(clientId);
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : `Could not remove wiring for ${clientId}`,
+        "attention",
+        3500,
+      );
+    } finally {
+      busy = { ...busy, [clientId]: false };
+    }
+  }
 </script>
 
 <section class="verify" aria-labelledby="verify-heading">
@@ -277,7 +295,7 @@
     muted
     text={view === "select"
       ? "Pick the agents you want Vaner to talk to. Each install drops MCP wiring + a primer so the agent actually calls vaner.* tools."
-      : "Vaner installs in up to four layers per client (see docs.vaner.ai/integrations/client-capabilities). MCP wiring alone often isn't enough — the agent needs the primer to know when to call Vaner."}
+      : "Each row shows the layers installed for that agent. Use Finish wiring to complete missing layers, or Remove to disconnect Vaner from an agent."}
   />
 
   {#if loading}
@@ -371,17 +389,30 @@
               </span>
             </span>
           </div>
-          {#if r.overall === "wired-mcp-only" || r.overall === "partial" || r.overall === "missing"}
+          {#if r.overall === "wired-mcp-only" || r.overall === "partial" || r.overall === "missing" || (onRemove && r.overall === "ready")}
             <div class="row-actions">
-              <V1GhostButton
-                title={busy[r.client_id]
-                  ? "Wiring…"
-                  : r.overall === "missing"
-                    ? "Install"
-                    : "Finish wiring"}
-                disabled={busy[r.client_id] === true}
-                onclick={() => void handleRepair(r.client_id)}
-              />
+              {#if r.overall === "wired-mcp-only" || r.overall === "partial" || r.overall === "missing"}
+                <V1GhostButton
+                  title={busy[r.client_id]
+                    ? "Working…"
+                    : r.overall === "missing"
+                      ? "Install"
+                      : "Finish wiring"}
+                  disabled={busy[r.client_id] === true}
+                  onclick={() => void handleRepair(r.client_id)}
+                />
+              {/if}
+              {#if onRemove && r.layers.mcp.wired}
+                <button
+                  type="button"
+                  class="remove-action"
+                  aria-label={`Remove Vaner from ${r.label}`}
+                  disabled={busy[r.client_id] === true}
+                  onclick={() => void handleRemove(r.client_id)}
+                >
+                  {busy[r.client_id] ? "Working…" : "Remove"}
+                </button>
+              {/if}
             </div>
           {/if}
         </li>
@@ -572,8 +603,33 @@
   }
   .row-actions {
     display: flex;
+    align-items: center;
     gap: 6px;
     margin-top: 4px;
+  }
+  .remove-action {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--vd-st-attention, #d27c7c) 72%, var(--vd-fg-3, #9a9aa2));
+    font-family: var(--vd-font);
+    font-size: 11px;
+    line-height: 1;
+    padding: 5px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .remove-action:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--vd-st-attention, #d27c7c) 10%, transparent);
+    color: var(--vd-st-attention, #d27c7c);
+  }
+  .remove-action:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .remove-action:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--vd-st-attention, #d27c7c) 50%, transparent);
+    outline-offset: 2px;
   }
   .verify-phrase {
     margin-top: 8px;

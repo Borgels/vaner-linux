@@ -14,6 +14,12 @@ pub fn resolve_vaner_bin() -> Result<PathBuf, String> {
             return Ok(PathBuf::from(explicit));
         }
     }
+    if let Ok(cwd) = std::env::current_dir() {
+        let local = cwd.join("scripts").join("vaner-local-cli.sh");
+        if local.is_file() {
+            return Ok(local);
+        }
+    }
     if let Ok(p) = which::which("vaner") {
         return Ok(p);
     }

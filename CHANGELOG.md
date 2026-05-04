@@ -14,6 +14,15 @@
 
 - Homebrew Cask source switches from `Borgels/vaner-desktop-macos` to `Borgels/vaner-desktop` (this repo) the first time the auto-bump runs against a release that includes a Tauri .dmg. After that, `vaner-desktop-macos` (the Swift app) can be sunset.
 
+## [0.3.0] - 2026-05-02
+
+### Added
+
+- Companion Focus pane backed by daemon `/focus`, with Work Here, Pin, Pause,
+  Resume, Manual Only, and Auto controls.
+- Thin Tauri commands for daemon-owned focus, resource, and job status.
+- Auto Focus privacy copy explaining the supported-client detection boundary.
+
 ## [0.2.4] - 2026-05-02
 
 ### Added

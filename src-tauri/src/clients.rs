@@ -10,7 +10,7 @@
 //! Errors map to short human strings via `human_io_error` /
 //! `human_subprocess_error` so the Svelte layer can toast them.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use serde::{Deserialize, Serialize};
@@ -153,11 +153,12 @@ async fn run_vaner_clients_json(
     allow_nonzero: bool,
 ) -> Result<String, String> {
     let bin = crate::vaner_cli::resolve_vaner_bin()?;
+    let repo_root = resolve_clients_repo_root(repo_root)?;
     let mut cmd = Command::new(&bin);
     cmd.arg("clients")
         .args(extra_args)
         .arg("--repo-root")
-        .arg(repo_root)
+        .arg(&repo_root)
         .arg("--format")
         .arg("json")
         .stdout(Stdio::piped())
@@ -181,6 +182,16 @@ async fn run_vaner_clients_json(
         ));
     }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn resolve_clients_repo_root(repo_root: &Path) -> Result<PathBuf, String> {
+    if !repo_root.as_os_str().is_empty() {
+        return Ok(repo_root.to_path_buf());
+    }
+    crate::workspace::resolve().ok_or_else(|| {
+        "No Vaner workspace selected. Pick a workspace before installing or verifying agents."
+            .to_string()
+    })
 }
 
 // ---------------------------------------------------------------------------

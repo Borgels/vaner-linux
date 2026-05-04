@@ -9,20 +9,23 @@
   import V1Body from "$lib/components/primitives/V1Body.svelte";
   import SourceGlyph from "$lib/components/primitives/SourceGlyph.svelte";
   import PopoverFooter from "$lib/components/PopoverFooter.svelte";
-  import type { LearningProgress } from "$lib/state/types.js";
+  import PopoverContextBlock from "./PopoverContextBlock.svelte";
+  import PopoverQuickActions from "./PopoverQuickActions.svelte";
+  import PredictionWorkSwitcher from "./PredictionWorkSwitcher.svelte";
+  import type { LearningProgress, PopoverRuntimeContext } from "$lib/state/types.js";
 
-  type Props = { progress: LearningProgress };
-  const { progress }: Props = $props();
+  type Props = { progress: LearningProgress; context: PopoverRuntimeContext };
+  const { progress, context }: Props = $props();
 </script>
 
 <QuietShell markState="learning" breathingMark stateLabel={`Learning · ${progress.uptimeMinutes}m`}>
-  <V1Kicker text="Reading your work" />
+  <V1Kicker text="Learning" />
   <div class="gap-6"></div>
-  <V1Headline text="Nothing prepared yet — Vaner is indexing." />
+  <V1Headline text="Vaner is learning your current context" />
   <div class="gap-8"></div>
   <V1Body
     muted
-    text={`Currently reading ${progress.currentlyReading.length} files across your sources. Typically prepared in ${progress.etaMinutes != null ? `~${progress.etaMinutes}m` : "a few minutes"}.`}
+    text={`Current client: ${context.clientLabel}. Workspace: ${context.workspaceLabel}. Strong predictions usually appear in ${progress.etaMinutes != null ? `~${progress.etaMinutes}m` : "a few minutes"}.`}
   />
 
   {#if progress.currentlyReading.length > 0}
@@ -39,8 +42,12 @@
     </div>
   {/if}
 
+  <PopoverContextBlock {context} />
+  <PredictionWorkSwitcher />
+  <PopoverQuickActions cockpitPrimary />
+
   {#snippet footer()}
-    <PopoverFooter health="learning" healthLabel={`${progress.filesWatched} files watched`} />
+    <PopoverFooter health="learning" healthLabel={`Last update ${context.lastUpdateLabel}`} detailsTab="prepared" />
   {/snippet}
 </QuietShell>
 

@@ -7,6 +7,7 @@
   import AgentsPane from "./panes/AgentsPane.svelte";
   import ModelsPane from "./panes/ModelsPane.svelte";
   import EnginePane from "./panes/EnginePane.svelte";
+  import FocusPane from "./panes/FocusPane.svelte";
   import PreferencesPane from "./panes/PreferencesPane.svelte";
   import DiagnosticsPane from "./panes/DiagnosticsPane.svelte";
 
@@ -23,6 +24,8 @@
   <ModelsPane />
 {:else if active === "engine"}
   <EnginePane />
+{:else if active === "focus"}
+  <FocusPane />
 {:else if active === "preferences"}
   <PreferencesPane />
 {:else if active === "diagnostics"}
