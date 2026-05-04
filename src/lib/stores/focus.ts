@@ -136,9 +136,9 @@ const routeFallback: FocusRouteState = {
   client_options: [],
   hardware_options: {
     resource_modes: [
-      { id: "low_power", label: "Conserve battery" },
+      { id: "low_power", label: "Light" },
       { id: "balanced", label: "Balanced" },
-      { id: "performance", label: "Maximum performance" },
+      { id: "performance", label: "Fast" },
     ],
     devices: [],
     runtimes: [],
@@ -146,7 +146,7 @@ const routeFallback: FocusRouteState = {
     current: { resource_mode: "balanced", device: "auto", backend: { name: "", base_url: "", model: "", api_key_env: "" } },
   },
   diagnostics: { why_not: fallback.why_not, raw_detected_clients: [], warnings: [] },
-  explanation: "Vaner route is unavailable because the daemon is not reachable.",
+  explanation: "Workspace settings are unavailable because Vaner is not reachable.",
 };
 
 const { subscribe, set }: { subscribe: Readable<FocusState>["subscribe"]; set: (v: FocusState) => void } = writable(fallback);
