@@ -86,6 +86,8 @@ desktop_file="${visible_desktop_files[0]}"
 desktop_name=$(basename "$desktop_file")
 [[ "$desktop_name" != *" "* ]] || fail "desktop file name contains spaces: $desktop_name"
 grep -qx 'Name=Vaner' "$desktop_file" || fail "desktop launcher does not display as Vaner"
+grep -qx 'Exec=/usr/bin/env VANER_DESKTOP_SHOW_ON_START=1 /usr/bin/vaner-desktop' "$desktop_file" \
+  || fail "desktop launcher must show on start and launch /usr/bin/vaner-desktop to avoid user PATH shadowing"
 grep -qx 'StartupNotify=true' "$desktop_file" || fail "desktop launcher lacks StartupNotify=true"
 echo "  desktop file: installed ($desktop_name)"
 

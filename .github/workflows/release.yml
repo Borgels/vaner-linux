@@ -68,6 +68,8 @@ jobs:
           # Cargo.toml authorship.
           ! grep -q "^authors" src-tauri/Cargo.toml \
             && fail "src-tauri/Cargo.toml is missing [package].authors."
+          ! grep -qx "Exec=/usr/bin/env VANER_DESKTOP_SHOW_ON_START=1 /usr/bin/vaner-desktop" src-tauri/linux/vaner.desktop \
+            && fail "src-tauri/linux/vaner.desktop must show on start and launch /usr/bin/vaner-desktop, not a PATH-resolved wrapper."
 
           echo "all release-time placeholders resolved."
 

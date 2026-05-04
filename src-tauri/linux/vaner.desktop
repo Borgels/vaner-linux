@@ -3,7 +3,7 @@ Type=Application
 Name=Vaner
 GenericName=AI agent companion
 Comment=Companion for the Vaner predictive-context engine
-Exec={{exec}}
+Exec=/usr/bin/env VANER_DESKTOP_SHOW_ON_START=1 /usr/bin/vaner-desktop
 Icon={{icon}}
 Terminal=false
 Categories=Utility;

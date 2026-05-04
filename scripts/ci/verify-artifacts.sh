@@ -89,6 +89,11 @@ while read -r d; do
     rm -rf "$tmpdir"
     exit 6
   }
+  grep -qx 'Exec=/usr/bin/env VANER_DESKTOP_SHOW_ON_START=1 /usr/bin/vaner-desktop' "$desktop_file" || {
+    echo "desktop launcher must show on start and launch /usr/bin/vaner-desktop to avoid user PATH shadowing" >&2
+    rm -rf "$tmpdir"
+    exit 6
+  }
   grep -qx 'StartupNotify=true' "$desktop_file" || {
     echo "desktop launcher lacks StartupNotify=true" >&2
     rm -rf "$tmpdir"

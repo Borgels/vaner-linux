@@ -18,7 +18,7 @@
 #   VANER_MODE=deb curl -fsSL https://vaner.ai/desktop.sh | bash
 #
 #   # pinned version:
-#   VANER_DESKTOP_VERSION=v0.3.1 VANER_MODE=deb \
+#   VANER_DESKTOP_VERSION=v0.3.2 VANER_MODE=deb \
 #     curl -fsSL https://vaner.ai/desktop.sh | bash
 #
 # Regardless of mode, the script refuses to install unless the
