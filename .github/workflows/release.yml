@@ -673,6 +673,6 @@ jobs:
       - name: dry-run notice
         if: github.event_name == 'workflow_dispatch'
         run: |
-          echo "::notice::Dry run complete — Linux + Windows artifacts built + signed + verified."
+          echo "::notice::Dry run complete — Linux + Windows + macOS artifacts built + signed + verified."
           echo "Skipped: GitHub Release upload, apt-repo publish."
           ls -la "${{ steps.stage.outputs.bundle_root }}"
