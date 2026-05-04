@@ -2,7 +2,7 @@
   "name": "vaner-desktop",
   "version": "0.3.0",
   "private": true,
-  "description": "Cross-platform (Linux + Windows) desktop companion for the Vaner predictive-context engine (Tauri v2 + SvelteKit).",
+  "description": "Cross-platform (macOS + Linux + Windows) desktop companion for the Vaner predictive-context engine (Tauri v2 + SvelteKit).",
   "author": "Borgels",
   "license": "Apache-2.0",
   "homepage": "https://vaner.ai",

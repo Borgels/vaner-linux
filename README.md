@@ -1,6 +1,6 @@
 # vaner-desktop
 
-Cross-platform (Linux + Windows) desktop companion for
+Cross-platform (macOS + Linux + Windows) desktop companion for
 [Vaner](https://github.com/Borgels/vaner) — the local-first preparation
 engine. Menu-bar / tray app that surfaces Prepared Work from the daemon:
 review notes, bug hypotheses, docs drift, virtual diffs, research briefs, and
@@ -11,13 +11,14 @@ content, but it does not apply patches or edit project files automatically.
 
 Tauri v2 + SvelteKit. Rust backend depends on the shared
 [`vaner-contract`](https://github.com/Borgels/vaner/tree/main/crates/vaner-contract)
-crate from the Vaner monorepo; the SwiftUI macOS sibling
-([vaner-desktop-macos](https://github.com/Borgels/vaner-desktop-macos))
-uses the same conformance fixtures to stay in lock-step without
-sharing a runtime.
+crate from the Vaner monorepo. macOS, Linux, and Windows release artifacts
+ship from this repository.
 
 Targets:
 
+- **macOS:** macOS 14+ recommended. Universal `.dmg` runs on Apple Silicon
+  and Intel Macs. Unsigned for the 0.x prereleases — Gatekeeper requires
+  right-click → **Open** on first launch.
 - **Linux:** Ubuntu 22.04+ / Debian 12+, X11 or KDE Wayland. Stock
   GNOME on Wayland needs `gnome-shell-extension-appindicator` for the
   tray icon to appear — the app detects this at first launch and
@@ -27,6 +28,20 @@ Targets:
   protected your PC → More info → Run anyway" on first install.
 
 ## Install
+
+### macOS
+
+Download the universal `.dmg` from the latest GitHub Release, open it,
+and drag Vaner into Applications.
+
+```bash
+VER=$(curl -fsSL https://api.github.com/repos/Borgels/vaner-desktop/releases/latest | jq -r .tag_name)
+curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner-desktop_${VER#v}_universal.dmg
+open vaner-desktop_${VER#v}_universal.dmg
+```
+
+> **Gatekeeper:** the 0.x DMGs are unsigned. On first launch,
+> right-click Vaner → **Open**.
 
 ### Linux
 
@@ -165,6 +180,16 @@ pnpm tauri dev
 Build a local Linux bundle:
 ```bash
 pnpm tauri build --bundles deb,appimage
+```
+
+### macOS
+
+Prereqs (macOS): Xcode command-line tools, Rust 1.85+, Node 20+ with
+corepack, and the Tauri macOS build dependencies.
+
+```bash
+pnpm install
+pnpm tauri build --bundles dmg --target universal-apple-darwin
 ```
 
 ### Windows

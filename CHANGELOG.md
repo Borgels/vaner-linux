@@ -12,6 +12,10 @@
 
 ### Changed
 
+- Public desktop positioning now treats macOS, Linux, and Windows as
+  first-class artifacts from `Borgels/vaner-desktop`; the old
+  `Borgels/vaner-desktop-macos` repository is no longer a public product
+  surface.
 - Homebrew Cask source switches from `Borgels/vaner-desktop-macos` to `Borgels/vaner-desktop` (this repo) the first time the auto-bump runs against a release that includes a Tauri .dmg. After that, `vaner-desktop-macos` (the Swift app) can be sunset.
 
 ## [0.3.0] - 2026-05-02
