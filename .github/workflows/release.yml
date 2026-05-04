@@ -253,25 +253,65 @@ jobs:
           node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const j=JSON.parse(fs.readFileSync(p));j.bundle.active=true;fs.writeFileSync(p,JSON.stringify(j,null,2));"
           grep '"active"' src-tauri/tauri.conf.json | head -1
 
+      - name: configure optional Apple signing
+        env:
+          APPLE_CERTIFICATE_SECRET: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD_SECRET: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY_SECRET: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD_SECRET: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          names=(
+            APPLE_CERTIFICATE
+            APPLE_CERTIFICATE_PASSWORD
+            APPLE_SIGNING_IDENTITY
+            APPLE_ID
+            APPLE_PASSWORD
+            APPLE_TEAM_ID
+          )
+          values=(
+            "$APPLE_CERTIFICATE_SECRET"
+            "$APPLE_CERTIFICATE_PASSWORD_SECRET"
+            "$APPLE_SIGNING_IDENTITY_SECRET"
+            "$APPLE_ID_SECRET"
+            "$APPLE_PASSWORD_SECRET"
+            "$APPLE_TEAM_ID_SECRET"
+          )
+
+          present=0
+          missing=()
+          for i in "${!names[@]}"; do
+            if [[ -n "${values[$i]}" ]]; then
+              present=$((present + 1))
+            else
+              missing+=("${names[$i]}")
+            fi
+          done
+
+          if (( present == 0 )); then
+            echo "Apple signing secrets are absent; building an unsigned .dmg."
+            exit 0
+          fi
+          if (( present != ${#names[@]} )); then
+            printf '::error::Partial Apple signing configuration; missing: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+          for i in "${!names[@]}"; do
+            {
+              printf '%s<<__VANER_APPLE_SECRET__\n' "${names[$i]}"
+              printf '%s\n' "${values[$i]}"
+              printf '__VANER_APPLE_SECRET__\n'
+            } >> "$GITHUB_ENV"
+          done
+          echo "Apple signing secrets are complete; signing and notarization enabled."
+
       - name: build .dmg via tauri-bundler (universal arm64 + x86_64)
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Optional Apple Developer credentials. When set, tauri-bundler
-          # signs the .app + notarises the .dmg. Omit them and the .dmg
-          # builds unsigned (users see "Apple cannot verify Vaner.app"
-          # on first launch; right-click → Open works around it).
-          # Set these in repo secrets to enable signing:
-          #   APPLE_CERTIFICATE                 base64-encoded p12
-          #   APPLE_CERTIFICATE_PASSWORD        password for the p12
-          #   APPLE_SIGNING_IDENTITY            "Developer ID Application: <Name> (<Team ID>)"
-          #   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID  for notarytool
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm tauri build --bundles dmg --target universal-apple-darwin
 
       - name: collect + rename macOS artifacts
