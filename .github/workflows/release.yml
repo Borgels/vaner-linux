@@ -118,15 +118,15 @@ jobs:
           [[ -n "$raw_deb" ]] || { echo "::error::tauri produced no .deb"; exit 1; }
           [[ -n "$raw_app" ]] || { echo "::error::tauri produced no .AppImage"; exit 1; }
 
-          # tauri-bundler names artifacts after productName ("Vaner Desktop"),
-          # so the file names contain a space. Rename to a hyphenated lowercase
-          # convention up front: dpkg-sig word-splits its arguments, apt URLs
-          # need to be predictable, and the updater manifest embeds the file
-          # name into latest.json. The .deb's internal `Package:` name (which
-          # `apt install` uses) is unaffected.
+          # tauri-bundler names artifacts after productName ("Vaner").
+          # Rename to a predictable lowercase convention up front:
+          # dpkg-sig word-splits its arguments, apt URLs need to be
+          # stable, and the updater manifest embeds the file name into
+          # latest.json. The .deb's internal `Package:` name is `vaner`;
+          # the executable remains `vaner-desktop`.
           version=$(jq -r .version src-tauri/tauri.conf.json)
-          deb_path="$bundle_root/deb/vaner-desktop_${version}_amd64.deb"
-          app_path="$bundle_root/appimage/vaner-desktop_${version}_amd64.AppImage"
+          deb_path="$bundle_root/deb/vaner_${version}_amd64.deb"
+          app_path="$bundle_root/appimage/vaner_${version}_amd64.AppImage"
           [[ "$raw_deb" != "$deb_path" ]] && mv -- "$raw_deb" "$deb_path"
           [[ "$raw_app" != "$app_path" ]] && mv -- "$raw_app" "$app_path"
           # Tauri emits a sidecar .AppImage.sig — follow the rename.
@@ -145,9 +145,9 @@ jobs:
         with:
           name: linux-bundle
           path: |
-            src-tauri/target/release/bundle/deb/vaner-desktop_*_amd64.deb
-            src-tauri/target/release/bundle/appimage/vaner-desktop_*_amd64.AppImage
-            src-tauri/target/release/bundle/appimage/vaner-desktop_*_amd64.AppImage.sig
+            src-tauri/target/release/bundle/deb/vaner_*_amd64.deb
+            src-tauri/target/release/bundle/appimage/vaner_*_amd64.AppImage
+            src-tauri/target/release/bundle/appimage/vaner_*_amd64.AppImage.sig
           if-no-files-found: error
           retention-days: 7
 
@@ -406,11 +406,11 @@ jobs:
           find artifacts/macos   -name "*.dmg"           -exec mv {} "$bundle_root/dmg/"     \;
           find artifacts/macos   -name "*.dmg.sig"       -exec mv {} "$bundle_root/dmg/"     \;
 
-          deb_path=$(ls "$bundle_root/deb"/vaner-desktop_*_amd64.deb)
-          app_path=$(ls "$bundle_root/appimage"/vaner-desktop_*_amd64.AppImage)
+          deb_path=$(ls "$bundle_root/deb"/vaner_*_amd64.deb)
+          app_path=$(ls "$bundle_root/appimage"/vaner_*_amd64.AppImage)
           exe_path=$(ls "$bundle_root/nsis"/vaner-desktop_*_x64-setup.exe)
           dmg_path=$(ls "$bundle_root/dmg"/vaner-desktop_*_universal.dmg 2>/dev/null || true)
-          version=$(echo "$deb_path" | sed -E 's/.*vaner-desktop_([^_]+)_.*/\1/')
+          version=$(echo "$deb_path" | sed -E 's/.*vaner_([^_]+)_.*/\1/')
 
           echo "bundle_root=$bundle_root" >> "$GITHUB_OUTPUT"
           echo "deb_path=$deb_path" >> "$GITHUB_OUTPUT"

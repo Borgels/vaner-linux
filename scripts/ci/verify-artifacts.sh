@@ -49,4 +49,52 @@ if command -v dpkg-sig >/dev/null; then
   done < <(find "$bundle_dir" -maxdepth 3 -type f -name "*.deb")
 fi
 
+# Desktop launcher sanity for Debian artifacts. Ubuntu/GNOME indexing is
+# sensitive to launcher metadata, so catch regressions before upload.
+while read -r d; do
+  echo "→ inspect desktop launcher $(basename "$d")"
+  tmpdir=$(mktemp -d)
+  dpkg-deb -x "$d" "$tmpdir"
+  mapfile -t desktop_files < <(find "$tmpdir/usr/share/applications" -maxdepth 1 -type f -iname "*vaner*.desktop" 2>/dev/null | sort)
+  [[ "${#desktop_files[@]}" -gt 0 ]] || {
+    printf 'expected at least one Vaner desktop file in %s\n' "$d" >&2
+    rm -rf "$tmpdir"
+    exit 6
+  }
+  if command -v desktop-file-validate >/dev/null; then
+    for candidate in "${desktop_files[@]}"; do
+      desktop-file-validate "$candidate"
+    done
+  fi
+  visible_desktop_files=()
+  for candidate in "${desktop_files[@]}"; do
+    if ! grep -qx 'NoDisplay=true' "$candidate"; then
+      visible_desktop_files+=("$candidate")
+    fi
+  done
+  [[ "${#visible_desktop_files[@]}" -eq 1 ]] || {
+    printf 'expected one visible Vaner desktop launcher in %s, found %s\n' "$d" "${#visible_desktop_files[@]}" >&2
+    rm -rf "$tmpdir"
+    exit 6
+  }
+  desktop_file="${visible_desktop_files[0]}"
+  desktop_name=$(basename "$desktop_file")
+  [[ "$desktop_name" != *" "* ]] || {
+    echo "desktop file name contains spaces: $desktop_name" >&2
+    rm -rf "$tmpdir"
+    exit 6
+  }
+  grep -qx 'Name=Vaner' "$desktop_file" || {
+    echo "desktop launcher does not display as Vaner" >&2
+    rm -rf "$tmpdir"
+    exit 6
+  }
+  grep -qx 'StartupNotify=true' "$desktop_file" || {
+    echo "desktop launcher lacks StartupNotify=true" >&2
+    rm -rf "$tmpdir"
+    exit 6
+  }
+  rm -rf "$tmpdir"
+done < <(find "$bundle_dir" -maxdepth 3 -type f -name "*.deb")
+
 echo "all signatures verified"

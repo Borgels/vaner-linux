@@ -11,7 +11,7 @@ export VANER_DESKTOP_LOCAL_BUILD="${VANER_DESKTOP_LOCAL_BUILD:-1}"
 export VANER_DESKTOP_SHOW_ON_START="${VANER_DESKTOP_SHOW_ON_START:-1}"
 export VANER_DISABLE_UPDATER="${VANER_DISABLE_UPDATER:-1}"
 
-APPIMAGE="$REPO_ROOT/src-tauri/target/release/bundle/appimage/Vaner Desktop_0.3.0_amd64.AppImage"
+APPIMAGE="$REPO_ROOT/src-tauri/target/release/bundle/appimage/Vaner_0.3.1_amd64.AppImage"
 
 if [[ ! -x "$APPIMAGE" ]]; then
   chmod +x "$APPIMAGE"

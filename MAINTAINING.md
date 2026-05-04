@@ -128,7 +128,7 @@ The release key expires 2028-04-23. Plan to rotate at least three months before 
 
 ```bash
 gpg --import scripts/release-key.asc
-gpg --verify vaner-desktop_*.deb.asc vaner-desktop_*.deb
+gpg --verify vaner_*.deb.asc vaner_*.deb
 ```
 
 ### Manually rebuild the apt repo locally
@@ -150,8 +150,8 @@ The output mirrors what ends up on `gh-pages`. Inspect `Release.gpg` and `InRele
 
 ```bash
 git checkout gh-pages
-reprepro -b . remove stable vaner-desktop
-git commit -am "chore: yank vaner-desktop $version"
+reprepro -b . remove stable vaner
+git commit -am "chore: yank vaner $version"
 git push origin gh-pages
 ```
 

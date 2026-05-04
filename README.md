@@ -50,17 +50,14 @@ Three paths, all signed — pick whichever fits your workflow:
 ### 1. Apt repository (recommended — auto-upgrades via `apt upgrade`)
 
 The installer adds a signed apt repo at `https://apt.vaner.ai` and
-installs the `vaner-desktop` package. Every future release arrives
-through `apt upgrade` without you running anything else.
-
-> **Naming:** the desktop client's apt package is `vaner-desktop`.
-> The bare `vaner` name is reserved for the daemon CLI (the Python
-> engine that watches your sources and exposes the cockpit on
-> 127.0.0.1:8473), so future apt distribution of the engine doesn't
-> collide.
+installs the `vaner` desktop package. Every future release arrives
+through `apt upgrade` without you running anything else. The executable
+is still `vaner-desktop`; the Python engine/CLI remains the PyPI
+package and command `vaner`. If the CLI is ever shipped through apt, it
+should use the package name `vaner-cli`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Borgels/vaner-desktop/main/scripts/install.sh | bash
+curl -fsSL https://vaner.ai/desktop.sh | bash
 ```
 
 Prefer the plain-apt form (identical result, no pipe-to-bash):
@@ -70,7 +67,7 @@ curl -fsSL https://apt.vaner.ai/release-key.asc \
   | sudo gpg --dearmor -o /etc/apt/keyrings/vaner.gpg
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/vaner.gpg] https://apt.vaner.ai stable main" \
   | sudo tee /etc/apt/sources.list.d/vaner.list
-sudo apt update && sudo apt install vaner-desktop
+sudo apt update && sudo apt install vaner
 ```
 
 `arch=amd64` keeps apt from asking the repo for i386 package lists
@@ -79,7 +76,7 @@ sudo apt update && sudo apt install vaner-desktop
 ### 2. One-off `.deb` (no apt-repo registration)
 
 ```bash
-VANER_MODE=deb curl -fsSL https://raw.githubusercontent.com/Borgels/vaner-desktop/main/scripts/install.sh | bash
+VANER_MODE=deb curl -fsSL https://vaner.ai/desktop.sh | bash
 ```
 
 Same fingerprint-pin + detached-sig verification as the apt path;
@@ -89,13 +86,13 @@ subsequent releases don't auto-install unless you re-run.
 
 ```bash
 VER=$(curl -fsSL https://api.github.com/repos/Borgels/vaner-desktop/releases/latest | jq -r .tag_name)
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner-desktop_${VER#v}_amd64.deb
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner-desktop_${VER#v}_amd64.deb.asc
+curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner_${VER#v}_amd64.deb
+curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner_${VER#v}_amd64.deb.asc
 curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/release-key.asc
 
 gpg --import release-key.asc
-gpg --verify vaner-desktop_${VER#v}_amd64.deb.asc vaner-desktop_${VER#v}_amd64.deb
-sudo apt install ./vaner-desktop_${VER#v}_amd64.deb
+gpg --verify vaner_${VER#v}_amd64.deb.asc vaner_${VER#v}_amd64.deb
+sudo apt install ./vaner_${VER#v}_amd64.deb
 ```
 
 The release key fingerprint is
@@ -111,13 +108,13 @@ verify, `chmod +x`, run:
 
 ```bash
 VER=$(curl -fsSL https://api.github.com/repos/Borgels/vaner-desktop/releases/latest | jq -r .tag_name)
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner-desktop_${VER#v}_amd64.AppImage
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner-desktop_${VER#v}_amd64.AppImage.asc
+curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner_${VER#v}_amd64.AppImage
+curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner_${VER#v}_amd64.AppImage.asc
 curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/release-key.asc
 gpg --import release-key.asc
-gpg --verify vaner-desktop_${VER#v}_amd64.AppImage.asc vaner-desktop_${VER#v}_amd64.AppImage
-chmod +x vaner-desktop_${VER#v}_amd64.AppImage
-./vaner-desktop_${VER#v}_amd64.AppImage
+gpg --verify vaner_${VER#v}_amd64.AppImage.asc vaner_${VER#v}_amd64.AppImage
+chmod +x vaner_${VER#v}_amd64.AppImage
+./vaner_${VER#v}_amd64.AppImage
 ```
 
 ### Windows
