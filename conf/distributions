@@ -1,5 +1,5 @@
 Origin: Vaner
-Label: Vaner Desktop Linux
+Label: Vaner Linux
 Codename: stable
 Suite: stable
 Components: main
@@ -7,4 +7,4 @@ Architectures: amd64
 DebIndices: Packages Release . .gz .bz2
 DscIndices: Sources Release . .gz .bz2
 Tracking: keep includechanges
-Description: Signed apt repository for the Vaner desktop Linux companion.
+Description: Signed apt repository for the Vaner desktop app.

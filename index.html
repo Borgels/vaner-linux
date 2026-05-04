@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Vaner Desktop Linux — apt repository</title>
+  <title>Vaner Linux — apt repository</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 680px; margin: 48px auto; padding: 0 20px; line-height: 1.55; color: #1a1720; }
@@ -16,7 +16,7 @@
 </head>
 <body>
   <h1>vaner<span class="accent">_</span> · apt repository</h1>
-  <p>Signed <code>.deb</code> packages for the Vaner Linux desktop companion.</p>
+  <p>Signed <code>.deb</code> packages for the Vaner desktop app.</p>
 
   <pre><code>curl -fsSL https://apt.vaner.ai/release-key.asc \
   | sudo gpg --dearmor -o /etc/apt/keyrings/vaner.gpg
@@ -25,12 +25,12 @@ echo "deb [signed-by=/etc/apt/keyrings/vaner.gpg] https://apt.vaner.ai stable ma
   | sudo tee /etc/apt/sources.list.d/vaner.list
 
 sudo apt update
-sudo apt install vaner-desktop</code></pre>
+sudo apt install vaner</code></pre>
 
   <p class="hint">Release key fingerprint:
     <code>506B8FA959917D530E5EE7203D219B47A7E4F046</code>
   </p>
   <p class="hint">Source: <a href="https://github.com/Borgels/vaner-desktop">github.com/Borgels/vaner-desktop</a>
-    · Docs: <a href="https://docs.vaner.ai/desktop">docs.vaner.ai/desktop</a></p>
+    · Docs: <a href="https://docs.vaner.ai/getting-started">docs.vaner.ai/getting-started</a></p>
 </body>
 </html>
