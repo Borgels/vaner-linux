@@ -31,13 +31,12 @@ Targets:
 
 ### macOS
 
-Download the universal `.dmg` from the latest GitHub Release, open it,
-and drag Vaner into Applications.
+Download the universal `.dmg` from vaner.ai, open it, and drag Vaner
+into Applications.
 
 ```bash
-VER=$(curl -fsSL https://api.github.com/repos/Borgels/vaner-desktop/releases/latest | jq -r .tag_name)
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner-desktop_${VER#v}_universal.dmg
-open vaner-desktop_${VER#v}_universal.dmg
+curl -L -o vaner-desktop.dmg https://vaner.ai/download/macos
+open vaner-desktop.dmg
 ```
 
 > **Gatekeeper:** the 0.x DMGs are unsigned. On first launch,
@@ -85,10 +84,10 @@ subsequent releases don't auto-install unless you re-run.
 ### 3. Manual GPG verify then `apt install`
 
 ```bash
-VER=$(curl -fsSL https://api.github.com/repos/Borgels/vaner-desktop/releases/latest | jq -r .tag_name)
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner_${VER#v}_amd64.deb
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner_${VER#v}_amd64.deb.asc
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/release-key.asc
+VER=v$(curl -fsSL https://vaner.ai/desktop/latest.json | jq -r .version)
+curl -LO https://vaner.ai/desktop/releases/$VER/vaner_${VER#v}_amd64.deb
+curl -LO https://vaner.ai/desktop/releases/$VER/vaner_${VER#v}_amd64.deb.asc
+curl -LO https://vaner.ai/desktop/releases/$VER/release-key.asc
 
 gpg --import release-key.asc
 gpg --verify vaner_${VER#v}_amd64.deb.asc vaner_${VER#v}_amd64.deb
@@ -107,10 +106,10 @@ Every release ships an `.AppImage` alongside the `.deb`. Download,
 verify, `chmod +x`, run:
 
 ```bash
-VER=$(curl -fsSL https://api.github.com/repos/Borgels/vaner-desktop/releases/latest | jq -r .tag_name)
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner_${VER#v}_amd64.AppImage
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/vaner_${VER#v}_amd64.AppImage.asc
-curl -LO https://github.com/Borgels/vaner-desktop/releases/download/$VER/release-key.asc
+VER=v$(curl -fsSL https://vaner.ai/desktop/latest.json | jq -r .version)
+curl -LO https://vaner.ai/desktop/releases/$VER/vaner_${VER#v}_amd64.AppImage
+curl -LO https://vaner.ai/desktop/releases/$VER/vaner_${VER#v}_amd64.AppImage.asc
+curl -LO https://vaner.ai/desktop/releases/$VER/release-key.asc
 gpg --import release-key.asc
 gpg --verify vaner_${VER#v}_amd64.AppImage.asc vaner_${VER#v}_amd64.AppImage
 chmod +x vaner_${VER#v}_amd64.AppImage
@@ -119,21 +118,19 @@ chmod +x vaner_${VER#v}_amd64.AppImage
 
 ### Windows
 
-Download the NSIS installer from the latest GitHub Release and run
-it. The installer is per-user — no admin prompt — and registers an
-auto-updater that follows the same minisign-signed `latest.json`
-flow as the AppImage.
+Download the NSIS installer from vaner.ai and run it. The installer is
+per-user — no admin prompt — Authenticode-signed in release CI, and
+registers an auto-updater that follows the same minisign-signed
+`latest.json` flow as Linux.
 
 ```powershell
-$ver = (Invoke-RestMethod https://api.github.com/repos/Borgels/vaner-desktop/releases/latest).tag_name
-$url = "https://github.com/Borgels/vaner-desktop/releases/download/$ver/vaner-desktop_${ver -replace '^v',''}_x64-setup.exe"
-Invoke-WebRequest $url -OutFile vaner-desktop-setup.exe
+Invoke-WebRequest https://vaner.ai/download/windows -OutFile vaner-desktop-setup.exe
 Start-Process .\vaner-desktop-setup.exe
 ```
 
-> **SmartScreen:** the 0.x installers are unsigned. Windows will say
-> "Windows protected your PC". Click **More info → Run anyway**.
-> Code-signing is on the roadmap for 1.0.
+> **SmartScreen:** freshly signed 0.x installers may still warn until
+> Microsoft reputation builds. The Authenticode signature should show
+> Vaner's publisher before you continue.
 
 ## Updates
 
@@ -141,9 +138,10 @@ The app checks for updates on every launch via
 [`tauri-plugin-updater`](https://v2.tauri.app/plugin/updater/); every
 update is signed with a separate minisign key whose public half is
 embedded in the app. A small banner appears in the popover when a
-new release is ready; click **Install** to download + verify +
-replace in place. The apt-repo path gets the same updates through
-your system's normal update flow — pick one, not both.
+new release is ready; click **Update now** to download, verify,
+install, and restart. Updater metadata and artifact URLs are served
+through `https://vaner.ai/desktop/*`; the current backing storage is
+GitHub Releases behind vaner.ai redirects.
 
 ## Status
 

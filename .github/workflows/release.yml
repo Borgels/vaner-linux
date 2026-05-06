@@ -112,6 +112,9 @@ jobs:
 
       - name: collect + rename Linux artifacts
         id: collect
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -e
           bundle_root="src-tauri/target/release/bundle"
@@ -137,6 +140,22 @@ jobs:
             mv -- "$raw_sig" "$app_path.sig"
           fi
 
+          # Tauri does not currently emit a .deb updater signature next
+          # to the package in all bundler versions. The updater supports
+          # deb installs, so sign the exact post-rename .deb bytes here
+          # and include that minisign payload in latest.json.
+          if [[ ! -f "$deb_path.sig" ]]; then
+            [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]] || {
+              echo "::error::TAURI_SIGNING_PRIVATE_KEY is required to sign the .deb updater payload"
+              exit 1
+            }
+            pnpm tauri signer sign "$deb_path"
+          fi
+          if grep -q "Your file was signed successfully" "$deb_path.sig"; then
+            echo "::error::.deb updater signature contains signer CLI status output"
+            exit 1
+          fi
+
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "deb_path=$deb_path" >> "$GITHUB_OUTPUT"
           echo "app_path=$app_path" >> "$GITHUB_OUTPUT"
@@ -148,6 +167,7 @@ jobs:
           name: linux-bundle
           path: |
             src-tauri/target/release/bundle/deb/vaner_*_amd64.deb
+            src-tauri/target/release/bundle/deb/vaner_*_amd64.deb.sig
             src-tauri/target/release/bundle/appimage/vaner_*_amd64.AppImage
             src-tauri/target/release/bundle/appimage/vaner_*_amd64.AppImage.sig
           if-no-files-found: error
@@ -181,6 +201,41 @@ jobs:
       - run: pnpm install --frozen-lockfile
         shell: pwsh
 
+      - name: configure Windows Authenticode signing
+        shell: pwsh
+        env:
+          WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
+          WINDOWS_CODESIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+          WINDOWS_CODESIGN_TIMESTAMP_URL: ${{ vars.WINDOWS_CODESIGN_TIMESTAMP_URL }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CODESIGN_PFX_BASE64)) {
+            throw "WINDOWS_CODESIGN_PFX_BASE64 secret is required for Windows releases."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CODESIGN_PFX_PASSWORD)) {
+            throw "WINDOWS_CODESIGN_PFX_PASSWORD secret is required for Windows releases."
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP "vaner-codesign.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CODESIGN_PFX_BASE64))
+          $password = ConvertTo-SecureString $env:WINDOWS_CODESIGN_PFX_PASSWORD -AsPlainText -Force
+          $imported = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          $cert = @($imported)[0]
+          if (-not $cert.Thumbprint) {
+            throw "Could not import Windows code-signing certificate."
+          }
+
+          $timestampUrl = if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CODESIGN_TIMESTAMP_URL)) {
+            "http://timestamp.digicert.com"
+          } else {
+            $env:WINDOWS_CODESIGN_TIMESTAMP_URL
+          }
+
+          $env:WINDOWS_CODESIGN_THUMBPRINT = $cert.Thumbprint
+          $env:WINDOWS_CODESIGN_TIMESTAMP_URL = $timestampUrl
+          node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const j=JSON.parse(fs.readFileSync(p));j.bundle.windows={...(j.bundle.windows||{}),digestAlgorithm:'sha256',certificateThumbprint:process.env.WINDOWS_CODESIGN_THUMBPRINT,timestampUrl:process.env.WINDOWS_CODESIGN_TIMESTAMP_URL};fs.writeFileSync(p,JSON.stringify(j,null,2));"
+          Write-Host "Configured Authenticode signing certificate: $($cert.Subject)"
+
       - name: enable bundle for this run
         shell: pwsh
         run: |
@@ -213,8 +268,31 @@ jobs:
           if ($rawExe.Name -ne $exeName) { Rename-Item -Path $rawExe.FullName -NewName $exeName }
           if ($rawSig.Name -ne $sigName) { Rename-Item -Path $rawSig.FullName -NewName $sigName }
 
+          $signedExe = Join-Path $bundleRoot $exeName
+          $signature = Get-AuthenticodeSignature -FilePath $signedExe
+          if ($signature.Status -ne "Valid") {
+            Write-Error "::error::Windows installer Authenticode signature is not valid: $($signature.Status) $($signature.StatusMessage)"
+            exit 1
+          }
+          Write-Host "Authenticode signer: $($signature.SignerCertificate.Subject)"
+
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Get-ChildItem $bundleRoot
+
+      - name: Windows UI smoke screenshot
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "vaner-desktop_*_x64-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "No Windows installer found for smoke test." }
+          ./scripts/ci/windows-ui-smoke.ps1 -InstallerPath $installer.FullName -ArtifactDir "artifacts/windows-smoke"
+
+      - name: upload Windows UI smoke screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-smoke
+          path: artifacts/windows-smoke
+          if-no-files-found: error
+          retention-days: 14
 
       - name: upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -401,6 +479,7 @@ jobs:
           # artifacts/{linux,windows,macos}/. Find each file by name and
           # move it into the flat layout sign-artifacts.sh expects.
           find artifacts/linux  -name "*.deb"           -exec mv {} "$bundle_root/deb/"      \;
+          find artifacts/linux  -name "*.deb.sig"       -exec mv {} "$bundle_root/deb/"      \;
           find artifacts/linux  -name "*.AppImage"      -exec mv {} "$bundle_root/appimage/" \;
           find artifacts/linux  -name "*.AppImage.sig"  -exec mv {} "$bundle_root/appimage/" \;
           find artifacts/windows -name "*-setup.exe"     -exec mv {} "$bundle_root/nsis/"    \;
@@ -437,37 +516,49 @@ jobs:
           ./scripts/ci/verify-artifacts.sh "${{ steps.stage.outputs.bundle_root }}"
 
       - name: compose latest.json updater manifest (linux + windows + optional darwin)
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         id: manifest
         run: |
           set -euo pipefail
           bundle_root="${{ steps.stage.outputs.bundle_root }}"
+          deb_sig=$(find "$bundle_root/deb" -maxdepth 1 -name "*.deb.sig" -print -quit)
           app_sig=$(find "$bundle_root/appimage" -maxdepth 1 -name "*.AppImage.sig" -print -quit)
           win_sig=$(find "$bundle_root/nsis" -maxdepth 1 -name "*.exe.sig" -print -quit)
           dmg_path=$(find "$bundle_root/dmg" -maxdepth 1 -name "*.dmg" -print -quit || true)
           dmg_sig=$(find "$bundle_root/dmg" -maxdepth 1 -name "*.dmg.sig" -print -quit || true)
+          [[ -n "$deb_sig" ]] || { echo "::error::missing .deb .sig"; exit 1; }
           [[ -n "$app_sig" ]] || { echo "::error::missing AppImage .sig"; exit 1; }
           [[ -n "$win_sig" ]] || { echo "::error::missing NSIS .exe.sig"; exit 1; }
+          deb_sig_content=$(tr -d '\n' < "$deb_sig")
           app_sig_content=$(tr -d '\n' < "$app_sig")
           win_sig_content=$(tr -d '\n' < "$win_sig")
+          deb_name=$(basename "${{ steps.stage.outputs.deb_path }}")
           app_name=$(basename "${{ steps.stage.outputs.app_path }}")
           exe_name=$(basename "${{ steps.stage.outputs.exe_path }}")
-          version="${GITHUB_REF_NAME#v}"
+          release_tag="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_REF:-}" != refs/tags/v* ]]; then
+            release_tag="v${{ steps.stage.outputs.version }}"
+          fi
+          version="${release_tag#v}"
           pub_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          app_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${app_name}"
-          win_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${exe_name}"
+          release_base="https://vaner.ai/desktop/releases/${release_tag}"
+          deb_url="${release_base}/${deb_name}"
+          app_url="${release_base}/${app_name}"
+          win_url="${release_base}/${exe_name}"
           dmg_url=""; dmg_sig_content=""
           if [[ -n "$dmg_path" && -n "$dmg_sig" ]]; then
             dmg_name=$(basename "$dmg_path")
-            dmg_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${dmg_name}"
+            dmg_url="${release_base}/${dmg_name}"
             dmg_sig_content=$(tr -d '\n' < "$dmg_sig")
           fi
           out="$bundle_root/latest.json"
           python3 - <<PY > "$out"
           import json, os
           platforms = {
-              "linux-x86_64":   {"signature": "${app_sig_content}", "url": "${app_url}"},
-              "windows-x86_64": {"signature": "${win_sig_content}", "url": "${win_url}"},
+              "linux-x86_64-deb":      {"signature": "${deb_sig_content}", "url": "${deb_url}"},
+              "linux-x86_64-appimage": {"signature": "${app_sig_content}", "url": "${app_url}"},
+              "linux-x86_64":          {"signature": "${app_sig_content}", "url": "${app_url}"},
+              "windows-x86_64-nsis":   {"signature": "${win_sig_content}", "url": "${win_url}"},
+              "windows-x86_64":        {"signature": "${win_sig_content}", "url": "${win_url}"},
           }
           if "${dmg_url}" and "${dmg_sig_content}":
               platforms["darwin-universal"] = {
@@ -477,10 +568,14 @@ jobs:
           print(json.dumps({
               "version":  "${version}",
               "pub_date": "${pub_date}",
-              "notes":    "See the v${version} release notes at https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}",
+              "notes":    "Vaner Desktop v${version}",
               "platforms": platforms,
           }, indent=2))
           PY
+          if grep -q "github.com/${GITHUB_REPOSITORY}/releases" "$out"; then
+            echo "::error::latest.json must use vaner.ai release URLs, not GitHub release URLs."
+            exit 1
+          fi
           echo "latest_json_path=$out" >> "$GITHUB_OUTPUT"
           cat "$out"
 
@@ -491,13 +586,16 @@ jobs:
           files: |
             ${{ steps.stage.outputs.deb_path }}
             ${{ steps.stage.outputs.deb_path }}.asc
+            ${{ steps.stage.outputs.deb_path }}.sig
             ${{ steps.stage.outputs.app_path }}
             ${{ steps.stage.outputs.app_path }}.asc
+            ${{ steps.stage.outputs.app_path }}.sig
             ${{ steps.stage.outputs.exe_path }}
             ${{ steps.stage.outputs.exe_path }}.asc
             ${{ steps.stage.outputs.exe_path }}.sig
             ${{ steps.stage.outputs.bundle_root }}/dmg/*.dmg
             ${{ steps.stage.outputs.bundle_root }}/dmg/*.dmg.asc
+            ${{ steps.stage.outputs.bundle_root }}/dmg/*.dmg.sig
             ${{ steps.stage.outputs.bundle_root }}/SHA256SUMS
             ${{ steps.stage.outputs.bundle_root }}/SHA256SUMS.asc
             ${{ steps.manifest.outputs.latest_json_path }}
@@ -546,7 +644,7 @@ jobs:
             exit 0
           fi
           version="${TAG#v}"
-          exe_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/vaner-desktop_${version}_x64-setup.exe"
+          exe_url="https://vaner.ai/desktop/releases/${TAG}/vaner-desktop_${version}_x64-setup.exe"
           export PATH="$HOME/.dotnet/tools:$PATH"
           # `wingetcreate update` reads the existing manifest from the
           # upstream catalogue, edits version + URL + computes the
@@ -573,7 +671,7 @@ jobs:
             exit 0
           fi
           version="${TAG#v}"
-          dmg_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/vaner-desktop_${version}_universal.dmg"
+          dmg_url="https://vaner.ai/desktop/releases/${TAG}/vaner-desktop_${version}_universal.dmg"
           # Pull the .dmg sha256 from the staged bundle (sign-artifacts.sh
           # left a SHA256SUMS we can grep). Fall back to computing it on
           # the fly if needed.
@@ -588,10 +686,9 @@ jobs:
           git clone --depth 1 \
             "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Borgels/homebrew-vaner.git" "$tap_dir"
           cask="$tap_dir/Casks/vaner-desktop.rb"
-          # Switch the cask to source from this repo's release artifacts
+          # Switch the cask to source from the vaner.ai desktop mirror
           # and update version + sha256. The `verified:` prefix follows
-          # Homebrew's URL-spoofing-defence convention; we point it at
-          # this repo since Tauri-built .dmgs now live here.
+          # Homebrew's URL-spoofing-defence convention.
           python3 - <<PY
           from pathlib import Path
           import re
@@ -601,10 +698,10 @@ jobs:
           text = re.sub(r'sha256 "[^"]+"',   'sha256 "$dmg_sha"',   text, count=1)
           # Switch URL + verified prefix to this repo when first .dmg ships.
           text = re.sub(
-              r'url "https://github\.com/[^"]+",\s*\n\s*verified: "[^"]+"',
-              ('url "https://github.com/${GITHUB_REPOSITORY}/releases/download/'
+              r'url "https://[^"]+",\s*\n\s*verified: "[^"]+"',
+              ('url "https://vaner.ai/desktop/releases/'
                'v#{version}/vaner-desktop_#{version}_universal.dmg",\n'
-               '      verified: "github.com/${GITHUB_REPOSITORY}/"'),
+               '      verified: "vaner.ai/"'),
               text,
               count=1,
               flags=re.MULTILINE,

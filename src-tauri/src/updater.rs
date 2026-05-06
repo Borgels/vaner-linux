@@ -1,4 +1,4 @@
-//! Background updater — checks GitHub Releases via
+//! Background updater — checks the vaner.ai release mirror via
 //! `tauri-plugin-updater`, emits events the Svelte layer can surface
 //! as a calm "update available" toast.
 //!
@@ -16,13 +16,9 @@ pub struct UpdatePayload {
     pub version: String,
     pub current_version: String,
     pub release_notes: Option<String>,
-    /// What format the running binary was installed as. The Tauri-v2
-    /// updater on Linux can only self-replace AppImages — `.deb`
-    /// installs go to root-owned `/usr/bin/vaner-desktop` and the
-    /// updater throws "invalid updater binary format" on the swap.
-    /// The Svelte banner reads this and routes the user to the
-    /// release page instead of pretending the in-app install will
-    /// work.
+    /// What format the running binary was installed as. The Svelte layer
+    /// can surface this in diagnostics, but update installation itself is
+    /// always driven by Tauri's signed updater.
     pub install_kind: InstallKind,
 }
 
@@ -30,14 +26,16 @@ pub struct UpdatePayload {
 #[serde(rename_all = "snake_case")]
 pub enum InstallKind {
     /// `.deb` install at `/usr/bin/vaner-desktop` (root-owned). Tauri's
-    /// updater can't replace this; surface a "Download .deb" CTA.
+    /// updater installs a new signed package through the platform package
+    /// flow when the manifest exposes `linux-x86_64-deb`.
     Deb,
     /// AppImage launch — `$APPIMAGE` is set to the AppImage path.
     /// Tauri's updater self-replaces it and the in-app flow Just
     /// Works.
     AppImage,
-    /// Anything else (manual build, snap, flatpak, …). Surface a
-    /// "View release" CTA — we don't know how to swap the binary.
+    /// Anything else (manual build, snap, flatpak, Windows NSIS, …).
+    /// The install command still tries Tauri's updater; this is telemetry
+    /// for UI copy and diagnostics, not a hard gate.
     Other,
 }
 
@@ -82,24 +80,38 @@ pub fn update_install_kind() -> InstallKind {
     detect_install_kind()
 }
 
-/// Open the GitHub release page for `version` in the user's default
-/// browser. Used by the banner's "Download .deb" / "View release"
-/// CTA when the in-app updater can't self-replace.
+/// Open the vaner.ai download page for `version` in the user's default
+/// browser. This is an error fallback only; the primary update path is
+/// always the signed in-app updater.
 #[tauri::command]
 pub fn update_open_release(version: String) -> Result<(), String> {
-    let url = format!(
-        "https://github.com/Borgels/vaner-desktop/releases/tag/v{}",
-        version
-    );
+    let url = format!("https://vaner.ai/download?desktopVersion={version}");
     open_url(&url)
 }
 
 fn open_url(url: &str) -> Result<(), String> {
-    // xdg-open on Linux, no-op on platforms we don't run on. Spawning
-    // is enough — we don't care about the exit code; the user sees the
-    // browser open or it doesn't, in which case they'll tell us.
-    std::process::Command::new("xdg-open")
-        .arg(url)
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = std::process::Command::new("open");
+        command.arg(url);
+        command
+    };
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = std::process::Command::new("cmd");
+        command.args(["/C", "start", "", url]);
+        command
+    };
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    let mut command = {
+        let mut command = std::process::Command::new("xdg-open");
+        command.arg(url);
+        command
+    };
+
+    command
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("could not open URL: {e}"))
@@ -141,25 +153,17 @@ async fn check<R: Runtime>(app: AppHandle<R>) -> Result<(), Box<dyn std::error::
 }
 
 /// `#[tauri::command]` — invoked from Svelte when the user clicks
-/// "Install update" on the toast. Downloads + installs + emits
+/// "Update now" on the banner. Downloads + installs + emits
 /// progress events on `update:progress` for a future UI progress
 /// bar; once finished the app is in a restart-required state.
 ///
-/// Refuses to run on `.deb` installs: Tauri-v2's updater on Linux can
-/// only self-replace AppImages, so the swap throws "invalid updater
-/// binary format" and the user is told the update succeeded when it
-/// silently didn't. The banner branches on `install_kind` and routes
-/// `.deb` users to `update_open_release` instead.
+/// The release manifest must expose installer-specific targets
+/// (`linux-x86_64-deb`, `linux-x86_64-appimage`, `windows-x86_64-nsis`)
+/// so Tauri downloads the package format matching the running install.
 #[tauri::command]
 pub async fn install_update<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     if updater_disabled() {
         return Err("updater is disabled for this local build".to_string());
-    }
-    if detect_install_kind() == InstallKind::Deb {
-        return Err(
-            "in-app update is not supported on .deb installs; download the new .deb from the release page"
-                .to_string(),
-        );
     }
     let updater = app
         .updater_builder()
@@ -174,20 +178,23 @@ pub async fn install_update<R: Runtime>(app: AppHandle<R>) -> Result<(), String>
     };
 
     let app_handle = app.clone();
+    let mut downloaded: u64 = 0;
     update
         .download_and_install(
             |chunk, total| {
+                downloaded = downloaded.saturating_add(chunk as u64);
                 let fraction = total
-                    .map(|t| (chunk as f64) / (t as f64))
+                    .map(|t| (downloaded as f64) / (t as f64))
                     .unwrap_or(0.0)
                     .clamp(0.0, 1.0);
                 let _ = app_handle.emit("update:progress", fraction);
             },
-            || {
-                let _ = app_handle.emit("update:ready-to-restart", ());
-            },
+            || {},
         )
         .await
         .map_err(|e| format!("download-and-install failed: {e}"))?;
+    let _ = app.emit("update:progress", 1.0);
+    let _ = app.emit("update:ready-to-restart", ());
+    app.request_restart();
     Ok(())
 }
