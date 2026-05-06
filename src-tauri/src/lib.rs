@@ -236,8 +236,15 @@ pub fn run() {
             // explicitly so the build is testable without hunting for a
             // tray affordance. Production keeps tray-first behavior unless
             // the user/exported launcher requests the same override.
+            //
+            // Windows is different: Winget and Start Menu validation launch
+            // the app and expect a visible UI. Keeping a tray-only first
+            // launch there looks like a blank/no-op install, so Windows
+            // opens the popover by default unless explicitly suppressed.
             if std::env::var("VANER_DESKTOP_SHOW_ON_START").ok().as_deref() == Some("1")
                 || std::env::var("VANER_DESKTOP_LOCAL_BUILD").ok().as_deref() == Some("1")
+                || (cfg!(target_os = "windows")
+                    && std::env::var("VANER_DESKTOP_START_HIDDEN").ok().as_deref() != Some("1"))
             {
                 let show_app = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -246,7 +253,7 @@ pub fn run() {
             }
 
             // Background update check. Emits `update:available` when
-            // a new release is on GitHub and its minisign signature
+            // a new release is on vaner.ai and its minisign signature
             // verifies against the pubkey in tauri.conf.json. Failure
             // modes (no network, no update, bad signature) are all
             // silent by design — the user didn't ask.

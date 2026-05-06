@@ -8,12 +8,13 @@
     Default (fast):
       0  Welcome
       1  Work styles                       (multi-select chips)
-      4  Recommendation review + Apply     (preset card)
+      4  Recommended model + optional installed-model override
       5  Done
 
   First-run does not ask normal users to choose runtimes, models,
-  quantization, backends, or compute devices. Core Vaner makes that
-  choice from the hardware profile and this one optional work-type hint.
+  quantization, backends, or compute devices. Core Vaner recommends a
+  local model from the hardware profile and this optional work-type
+  hint; users who already have an Ollama model pulled can select it.
 
   `onComplete` is called only when the user clicks a final action.
 -->
@@ -36,10 +37,7 @@
   import V1PrimaryButton from "$lib/components/primitives/V1PrimaryButton.svelte";
   import V1GhostButton from "$lib/components/primitives/V1GhostButton.svelte";
   import Spinner from "$lib/components/primitives/Spinner.svelte";
-  // RecommendedPresetCard import removed — slide 4 renders the
-  // bundle inline from the SelectionResult instead of nesting a
-  // model-size card. The component file is still on disk; can be
-  // restored if we want a richer model picker later.
+  import RecommendedPresetCard from "$lib/components/RecommendedPresetCard.svelte";
   import WizardVerificationPanel from "$lib/components/WizardVerificationPanel.svelte";
   import type {
     BackgroundPosture,
@@ -65,7 +63,7 @@
   // Slide indices (first-run skips 2 + 3; those legacy slides are kept
   // unreachable until the old custom-question UI is fully deleted):
   //   0 Welcome · 1 Work styles · 2 Priority · 3 Energy ·
-  //   4 Recommendation review + Apply · 5 Done
+  //   4 Model recommendation · 5 Apply / Done
   const TOTAL_SLIDES = 6;
   let slide = $state(0);
 
@@ -98,10 +96,9 @@
   let widening = $state<{ id: string; reasons: string[] } | null>(null);
   let appliedBundleId = $state<string | null>(null);
   let applyError = $state<string | null>(null);
-  // Override id from the Light/Medium/Heavy switcher in the
-  // RecommendedPresetCard. When non-null and different from the registry's
-  // automatic pick, we persist it via `vaner config set backend.model`
-  // after the policy bundle is written.
+  // Override id from the recommendation review. When non-null and
+  // different from the registry's automatic pick, we persist it via
+  // `vaner config set backend.model` after the policy bundle is written.
   let selectedModelId = $state<string | null>(null);
 
   const hardware = $derived($setup.hardware);
@@ -180,17 +177,18 @@
   }
 
   async function nextSlide() {
-    // Slide 1 (Work styles): load the recommendation and immediately
-    // apply. The old "review" slide 4 is gone — there's nothing for
-    // the user to review or override (bundle picking is a function of
-    // hardware + answers; "recommended" with no choice is a misleading
-    // frame). Go straight from "tell me how you work" to "applying."
+    // Slide 1 (Work styles): load policy + model recommendations, then
+    // let the user accept the hardware pick or choose an installed model.
     if (slide === 1) {
       const ok = await loadRecommendations();
       if (ok) {
-        slide = 5;
-        void doApply();
+        slide = 4;
       }
+      return;
+    }
+    if (slide === 4) {
+      slide = 5;
+      void doApply();
       return;
     }
     slide = Math.min(slide + 1, TOTAL_SLIDES - 1);
@@ -198,7 +196,17 @@
 
   function prevSlide() {
     if (slide === 0) return;
+    if (slide === 4) {
+      slide = 1;
+      return;
+    }
     slide -= 1;
+  }
+
+  function backToRecommendation() {
+    applyError = null;
+    applyErrorStep = null;
+    slide = recommendation || modelRecommendation ? 4 : 1;
   }
 
   // Sequentialized apply with per-step status. Each step renders its own
@@ -225,6 +233,30 @@
   function autoModelId(): string | null {
     const auto = modelRecommendation?.user?.selected_model ?? modelRecommendation?.selected;
     return auto?.model_id ?? auto?.id ?? null;
+  }
+
+  type ExistingModelOption = {
+    runtime: string;
+    modelId: string;
+    size: string;
+  };
+
+  const installedModels = $derived.by<ExistingModelOption[]>(() => {
+    const seen = new Set<string>();
+    const rows: ExistingModelOption[] = [];
+    for (const row of hardware?.detected_models ?? []) {
+      const [runtime, modelId, size] = row;
+      if (!modelId || runtime !== "ollama" || seen.has(modelId)) continue;
+      seen.add(modelId);
+      rows.push({ runtime, modelId, size });
+    }
+    return rows;
+  });
+
+  function selectedModelDisplay(): string {
+    const auto = autoModelId();
+    if (!selectedModelId || selectedModelId === auto) return "Vaner recommendation";
+    return selectedModelId;
   }
 
   async function probeEngineReady(timeoutMs = 12_000): Promise<boolean> {
@@ -365,12 +397,19 @@
       ? "Get started"
       : slide === 1
         ? recommending || applying
-          ? "Setting up…"
-          : "Set up Vaner"
+          ? "Checking…"
+          : "Continue"
+        : slide === 4
+          ? applying
+            ? "Setting up…"
+            : "Use this setup"
         : "Continue",
   );
   const nextDisabled = $derived(
-    (slide === 1 && workStyles.length === 0) || recommending || applying,
+    (slide === 1 && workStyles.length === 0) ||
+      recommending ||
+      applying ||
+      (slide === 4 && modelRecommending),
   );
 
   // Build each question's choice list lazily so the chips can read
@@ -398,12 +437,13 @@
     { value: "use_machine", label: "Use this machine", hint: "Cranked — happy to ponder overnight." },
   ];
 
-  const dotCount = 3;
+  const dotCount = 4;
   // Visible-position-of-current-slide for the dots header.
-  // Flow is now just 0 → 1 → 5 (welcome → work styles → applying/done).
+  // Flow is 0 → 1 → 4 → 5.
   const dotIndex = $derived.by(() => {
     if (slide <= 1) return slide;
-    return 2;
+    if (slide === 4) return 2;
+    return 3;
   });
 </script>
 
@@ -496,6 +536,61 @@
           {/each}
         </div>
       </section>
+    {:else if slide === 4}
+      <!-- 4 · Recommended model + existing-model override -->
+      <section class="slide recommendation">
+        <V1Kicker text="Recommended model" />
+        <h1>Use Vaner’s hardware pick, or choose one you already have.</h1>
+        <p class="lead">
+          Vaner will configure Ollama for the recommended local model. If you
+          already pulled another Ollama model, select it here.
+        </p>
+
+        <RecommendedPresetCard
+          payload={modelRecommendation}
+          loading={modelRecommending}
+          hardware={hardware}
+          bind:selectedModelId
+        />
+
+        {#if installedModels.length > 0}
+          <div class="installed-models" role="radiogroup" aria-label="Installed Ollama models">
+            <div class="installed-head">
+              <span>Installed models</span>
+              <span>{selectedModelDisplay()}</span>
+            </div>
+            {#each installedModels as model (model.modelId)}
+              <button
+                type="button"
+                class="installed-row"
+                class:on={selectedModelId === model.modelId}
+                role="radio"
+                aria-checked={selectedModelId === model.modelId}
+                onclick={() => (selectedModelId = model.modelId)}
+              >
+                <code>{model.modelId}</code>
+                {#if model.size}<span>{model.size}</span>{/if}
+              </button>
+            {/each}
+            <button
+              type="button"
+              class="installed-row recommended-row"
+              class:on={!selectedModelId || selectedModelId === autoModelId()}
+              role="radio"
+              aria-checked={!selectedModelId || selectedModelId === autoModelId()}
+              onclick={() => (selectedModelId = autoModelId())}
+            >
+              <span>Use Vaner recommendation</span>
+              {#if autoModelId()}<code>{autoModelId()}</code>{/if}
+            </button>
+          </div>
+        {:else}
+          <p class="hardware-line">
+            No installed Ollama models were detected. Vaner will use the
+            recommended model and guide the download if needed.
+          </p>
+        {/if}
+      </section>
     {:else}
       <!-- 5 · Apply / Done. Widening branch is mostly dead code now
            that the onboarding wizard always submits local_only — but
@@ -556,7 +651,7 @@
               />
               <V1GhostButton
                 title="Back"
-                onclick={() => { applyError = null; applyErrorStep = null; slide = 1; }}
+                onclick={backToRecommendation}
               />
             </div>
           {/if}
@@ -787,6 +882,76 @@
   }
   .chip.on .hint {
     color: var(--vd-fg-2);
+  }
+
+  .recommendation {
+    max-width: 620px;
+  }
+  .installed-models {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 0.5px solid var(--vd-hair);
+  }
+  .installed-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--vd-fg-3);
+  }
+  .installed-head span:last-child {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--vd-fg-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .installed-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 34px;
+    padding: 8px 10px;
+    border: 0.5px solid var(--vd-line);
+    border-radius: var(--vd-r-chip);
+    background: var(--vd-bg-1);
+    color: var(--vd-fg-1);
+    font-family: var(--vd-font);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .installed-row:hover {
+    background: var(--vd-bg-2);
+  }
+  .installed-row.on {
+    background: color-mix(in srgb, var(--vd-amber) 14%, transparent);
+    border-color: color-mix(in srgb, var(--vd-amber) 50%, transparent);
+  }
+  .installed-row code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--vd-font-mono, monospace);
+    font-size: 11.5px;
+    color: var(--vd-fg-1);
+  }
+  .installed-row span {
+    color: var(--vd-fg-3);
+    font-size: 11px;
+  }
+  .recommended-row span:first-child {
+    color: var(--vd-fg-1);
+    font-size: 12px;
   }
 
   .loading {

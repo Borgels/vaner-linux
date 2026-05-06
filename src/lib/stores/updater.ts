@@ -9,11 +9,9 @@ export interface UpdateInfo {
   version: string;
   currentVersion: string;
   notes?: string | null;
-  /** What format the running binary was installed as. The banner
-   *  branches on this — Tauri's Linux updater can only self-replace
-   *  AppImages, so `.deb` installs get a "Download .deb" CTA that
-   *  opens the release page rather than pretending the in-app
-   *  install will work. */
+  /** What format the running binary was installed as. Kept for
+   *  diagnostics/copy; the update action itself always goes through
+   *  Tauri's signed updater. */
   installKind: InstallKind;
 }
 
@@ -55,7 +53,7 @@ export async function bootstrapUpdaterListeners(): Promise<void> {
     await listen<void>("update:ready-to-restart", () => {
       updateProgress.set(1);
       showToast(
-        "Update installed. Restart Vaner to finish.",
+        "Update installed. Restarting Vaner.",
         "success",
         8000,
       );
@@ -74,14 +72,13 @@ export async function installUpdate(): Promise<void> {
   }
 }
 
-/** Open the GitHub release page for `version`. Used by the banner's
- *  "Download .deb" / "View release" CTA when the in-app updater can't
- *  self-replace (most Linux installs that aren't AppImage). */
+/** Open the vaner.ai download page for `version`. Error fallback only;
+ *  normal updates use the signed in-app updater. */
 export async function openReleasePage(version: string): Promise<void> {
   try {
     await invoke("update_open_release", { version });
   } catch (err) {
-    const msg = typeof err === "string" ? err : "Could not open the release page.";
+    const msg = typeof err === "string" ? err : "Could not open the download page.";
     showToast(msg, "attention", 4000);
   }
 }

@@ -1,19 +1,18 @@
 <script lang="ts">
-  import {
-    availableUpdate,
-    installUpdate,
-    openReleasePage,
-    updateProgress,
-  } from "$lib/stores/updater.js";
+  import { availableUpdate, installUpdate, updateProgress } from "$lib/stores/updater.js";
 
   function dismiss() {
     availableUpdate.set(null);
+  }
+
+  function progressLabel(value: number | null): string {
+    if (value === null) return "";
+    return value >= 0.99 ? "Installing" : `Downloading ${Math.round(value * 100)}%`;
   }
 </script>
 
 {#if $availableUpdate}
   {@const u = $availableUpdate}
-  {@const inAppOK = u.installKind === "appimage"}
   <div class="banner" role="status" aria-live="polite">
     <div class="copy">
       <span class="label">Update available</span>
@@ -23,21 +22,14 @@
     </div>
     <div class="actions">
       {#if $updateProgress === null}
-        {#if inAppOK}
-          <button class="install" onclick={installUpdate}>Install</button>
-        {:else}
-          <!-- Tauri's Linux updater can only self-replace AppImages.
-               .deb installs get the release page so the user can grab
-               the new .deb; "other" (snap, flatpak, dev build) gets
-               the same treatment since we don't know how to swap. -->
-          <button class="install" onclick={() => openReleasePage(u.version)}>
-            {u.installKind === "deb" ? "Download .deb" : "View release"}
-          </button>
-        {/if}
+        <button class="install" onclick={installUpdate}>Update now</button>
         <button class="later" onclick={dismiss}>Later</button>
       {:else}
-        <div class="progress" aria-label="Update progress">
-          <div class="bar" style="width: {Math.round(($updateProgress ?? 0) * 100)}%"></div>
+        <div class="progress-wrap">
+          <span>{progressLabel($updateProgress)}</span>
+          <div class="progress" aria-label="Update progress">
+            <div class="bar" style="width: {Math.round(($updateProgress ?? 0) * 100)}%"></div>
+          </div>
         </div>
       {/if}
     </div>
@@ -79,6 +71,8 @@
     display: flex;
     gap: 6px;
     align-items: center;
+    min-width: 128px;
+    justify-content: flex-end;
   }
 
   button {
@@ -99,8 +93,20 @@
     font-weight: 500;
   }
 
+  .progress-wrap {
+    display: grid;
+    gap: 4px;
+    min-width: 132px;
+  }
+
+  .progress-wrap span {
+    font-size: 10px;
+    color: var(--vd-fg-3);
+    text-align: right;
+  }
+
   .progress {
-    width: 120px;
+    width: 132px;
     height: 4px;
     border-radius: 2px;
     background: var(--vd-hair);
